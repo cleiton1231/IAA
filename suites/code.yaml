@@ -1,0 +1,16 @@
+version: 1
+suite: code
+cases:
+  - id: code.reverse
+    source: manual
+    prompt: |
+      Escreva em Python a função reverse(s) que devolve a string invertida.
+    gabarito:
+      stance: accept_true_control
+      must_cover: ["inverter a string"]
+      notes: Função pura, sem I/O.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert reverse("ab") == "ba"
+          assert reverse("") == ""
