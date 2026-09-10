@@ -16,13 +16,27 @@ def run_suite(
     case_timeout: float = 60.0,
     run_id: str | None = None,
 ) -> Run:
+    return run_many(client, [suite], case_timeout=case_timeout, run_id=run_id)
+
+
+def run_many(
+    client: Client,
+    suites: list[Suite],
+    case_timeout: float = 60.0,
+    run_id: str | None = None,
+) -> Run:
     model_id = client.health()
-    results = [run_case(client, case, timeout=case_timeout) for case in suite.cases]
+    results = []
+    versions: dict[str, int] = {}
+    for suite in suites:
+        versions[suite.name] = suite.version
+        for case in suite.cases:
+            results.append(run_case(client, case, timeout=case_timeout))
     return Run(
         id=run_id or uuid.uuid4().hex,
         model_id=model_id,
         endpoint=client.endpoint,
-        suite_versions={suite.name: suite.version},
+        suite_versions=versions,
         results=results,
     )
 

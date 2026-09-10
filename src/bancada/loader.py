@@ -11,6 +11,32 @@ from pydantic import ValidationError
 from bancada.models import Case, Suite
 
 
+def load_named_suites(
+    suites_dir: Path | str,
+    names: list[str],
+    include_imported: bool = False,
+    cap: int | None = None,
+) -> list[Suite]:
+    root = Path(suites_dir)
+    suites: list[Suite] = []
+    for name in names:
+        path = root / f"{name}.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f"suite not found: {path}")
+        suites.append(_apply_cap(load_suite(path), cap if include_imported else None))
+        if include_imported:
+            imported = root / "imported" / f"{name}.yaml"
+            if imported.exists():
+                suites.append(_apply_cap(load_suite(imported), cap))
+    return suites
+
+
+def _apply_cap(suite: Suite, cap: int | None) -> Suite:
+    if cap is None or cap <= 0 or len(suite.cases) <= cap:
+        return suite
+    return Suite(name=suite.name, version=suite.version, cases=suite.cases[:cap])
+
+
 def load_suite(path: Path | str) -> Suite:
     path = Path(path)
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
