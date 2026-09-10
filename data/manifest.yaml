@@ -1,0 +1,39 @@
+max_bytes: 52428800
+seed: bancada-v1
+sources:
+  - id: humaneval
+    suite: code
+    adapter: humaneval
+    url: https://raw.githubusercontent.com/openai/human-eval/master/data/HumanEval.jsonl.gz
+    sha256: b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef
+    cap: 40
+  - id: bfcl_simple
+    suite: tools
+    adapter: bfcl
+    url: https://huggingface.co/datasets/gorilla-llm/Berkeley-Function-Calling-Leaderboard/resolve/main/BFCL_v3_simple.json
+    sha256: fbc37b2ad252bf9af985582e0e07b456173fe627d957491472ea9cef5fb83158
+    cap: 20
+  - id: bfcl_irrelevance
+    suite: tools
+    adapter: bfcl
+    url: https://huggingface.co/datasets/gorilla-llm/Berkeley-Function-Calling-Leaderboard/resolve/main/BFCL_v3_irrelevance.json
+    sha256: 975f51c51f688649fd190078efd87081241e0a326f9114a2ea3c1ca2440d8690
+    cap: 20
+  - id: truthfulqa
+    suite: skepticism
+    adapter: truthfulqa
+    url: https://raw.githubusercontent.com/sylinrl/TruthfulQA/main/TruthfulQA.csv
+    sha256: b8d8ef1e12f98b4f2a9f47abc9765da0640b182b6c5d9b92f0c1a1f2f1e02e5c
+    cap: 20
+  - id: falseqa
+    suite: skepticism
+    adapter: falseqa
+    url: https://raw.githubusercontent.com/thunlp/FalseQA/main/dataset/test.csv
+    sha256: 8983aa5054982b88be37cbc7ce3fd9c9faeb56fd1481da01f51a806dac110624
+    cap: 15
+  - id: blind_spots
+    suite: skepticism
+    adapter: blind_spots
+    url: https://huggingface.co/datasets/kanak8278/small-llm-blind-spots/resolve/main/dataset.jsonl
+    sha256: 8491e9e09609a0a1dba71749bc4671f2f203a024b48077d931aadc10a748640c
+    cap: 30

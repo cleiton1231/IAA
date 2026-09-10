@@ -1,0 +1,2 @@
+{"id": "simple_0", "question": "Set a reminder tomorrow at 9am", "function": [{"name": "cron", "description": "Schedule a reminder", "parameters": {"type": "object", "properties": {"at": {"type": "string"}}, "required": ["at"]}}], "expected_tool": "cron"}
+{"id": "irr_0", "question": "What is two plus two?", "function": [{"name": "cron", "description": "Schedule a reminder", "parameters": {"type": "object", "properties": {}}}], "expected_tool": null}
