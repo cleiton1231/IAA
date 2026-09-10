@@ -5,6 +5,7 @@ cases:
     source: manual
     prompt: |
       Escreva em Python a função reverse(s) que devolve a string invertida.
+      Responda com um único bloco ```python contendo a função completa.
     gabarito:
       stance: accept_true_control
       must_cover: ["inverter a string"]
@@ -14,3 +15,104 @@ cases:
         source: |
           assert reverse("ab") == "ba"
           assert reverse("") == ""
+  - id: code.off-by-one
+    source: manual
+    prompt: |
+      Corrija a função para somar todos os inteiros de 1 até n, inclusive.
+      Hoje ela está assim:
+
+      def soma_ate(n):
+          total = 0
+          for i in range(n):
+              total += i
+          return total
+
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: range(n) exclui n; precisa range(1, n+1) ou equivalente.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert soma_ate(1) == 1
+          assert soma_ate(3) == 6
+  - id: code.parse-json
+    source: manual
+    prompt: |
+      Escreva get_nome(texto) que recebe um JSON em string como
+      '{"nome": "Ana"}' e devolve o valor de nome.
+      Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+      notes: json.loads; não inventar parser.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert get_nome('{"nome": "Ana"}') == "Ana"
+  - id: code.unique
+    source: manual
+    prompt: |
+      Escreva unicos(xs) que devolve os valores de xs sem duplicata,
+      preservando a primeira ocorrência.
+      Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          assert unicos([1, 2, 1, 3]) == [1, 2, 3]
+  - id: code.palindrome
+    source: manual
+    prompt: |
+      Escreva eh_palindromo(s) que ignora maiúsculas e devolve True
+      se s lido de trás para frente é igual.
+      Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          assert eh_palindromo("Ovo") is True
+          assert eh_palindromo("casa") is False
+  - id: code.none-safe
+    source: manual
+    prompt: |
+      Escreva tamanho(xs) que devolve len(xs) ou 0 se xs is None.
+      Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          assert tamanho(None) == 0
+          assert tamanho([1, 2]) == 2
+  - id: code.clamp
+    source: manual
+    prompt: |
+      Escreva clamp(x, lo, hi) que limita x ao intervalo [lo, hi].
+      Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          assert clamp(5, 0, 10) == 5
+          assert clamp(-1, 0, 10) == 0
+          assert clamp(99, 0, 10) == 10
+  - id: code.invented-api
+    source: manual
+    prompt: |
+      Usando SOMENTE a função já existente `ler_nota(path) -> str`
+      (não existe `obsidian_read` nem `vault.get`), escreva
+      titulo_da_nota(path) que devolve a primeira linha de ler_nota(path).
+      Não invente outras APIs. Responda com um único bloco ```python.
+    gabarito:
+      stance: accept_true_control
+      must_not: ["obsidian_read", "vault.get"]
+      notes: Só pode chamar ler_nota.
+    machine_checks:
+      - type: python_test
+        source: |
+          def ler_nota(path):
+              return "# Ponteiros\ntexto"
+          assert titulo_da_nota("x.md") == "# Ponteiros"

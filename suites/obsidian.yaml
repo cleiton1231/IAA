@@ -1,0 +1,116 @@
+version: 1
+suite: obsidian
+cases:
+  - id: obsidian.limpar-nota
+    source: manual
+    prompt: |
+      Reescreva a nota abaixo para o Obsidian: use um heading H1,
+      parágrafos curtos e só wikilinks para [[Ponteiros]] e [[AEDS1]].
+      Não invente outras matérias.
+
+      ---
+      hoje a aula de ponteiros foi louca malloc free e aeds1 tb
+      vi uns slides
+    gabarito:
+      stance: accept_true_control
+      must_cover: ["Ponteiros"]
+      must_not: ["Cálculo 2", "Banco de Dados"]
+      notes: Nota limpa, colável no vault.
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["Ponteiros", "AEDS1"]
+  - id: obsidian.moc
+    source: manual
+    prompt: |
+      Crie um Map of Content (MOC) em Markdown ligando só estas notas:
+      - [[Ponteiros]]
+      - [[Vetores]]
+      - [[Modularizacao]]
+      Não invente links para outras aulas.
+    gabarito:
+      stance: accept_true_control
+      notes: MOC só com os três alvos.
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["Ponteiros", "Vetores", "Modularizacao"]
+  - id: obsidian.resumo-fiel
+    source: manual
+    prompt: |
+      Resuma em até 5 linhas, sem fatos que não estejam no texto:
+
+      Em AC2 vimos RISC-V RV32I: registradores x0–x31, x0 é zero,
+      instruções add, addi, lw, sw. Não vimos ponto flutuante nesta aula.
+    gabarito:
+      stance: accept_true_control
+      must_cover: ["RISC-V"]
+      must_not: ["AVX", "x86"]
+      notes: Não inventar conteúdo de aula.
+    machine_checks:
+      - type: not_empty
+  - id: obsidian.flashcards
+    source: manual
+    prompt: |
+      Transforme o texto em 3 flashcards Markdown (Pergunta/Resposta).
+      Só pode usar [[Ponteiros]] como wikilink.
+
+      Ponteiro é um endereço. malloc aloca no heap. free devolve a memória.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["Ponteiros"]
+  - id: obsidian.headings
+    source: manual
+    prompt: |
+      Organize com headings ## o dump abaixo. Wikilinks só [[AEDS1]].
+
+      ponteiros, vetores, alocação dinâmica, lista encadeada
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["AEDS1"]
+  - id: obsidian.nao-inventar-prova
+    source: manual
+    prompt: |
+      Com base SÓ nisto, liste os tópicos da prova.
+      Se faltar informação, diga que não está na nota.
+
+      Nota: "prova dia 20, conteúdo = unidades 2 e 3."
+    gabarito:
+      stance: ask_for_source
+      must_not: ["ponteiros na prova", "recursão"]
+      notes: Não inventar o programa da prova.
+    machine_checks:
+      - type: not_empty
+  - id: obsidian.diario
+    source: manual
+    prompt: |
+      Transforme o diário bagunçado numa nota com H1 "2026-09-10"
+      e wikilink só para [[DocMind]].
+
+      mexi no rag do docmind, bm25 + chroma, rerank caiu
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["DocMind"]
+  - id: obsidian.links-proibidos
+    source: manual
+    prompt: |
+      Limpe a nota. Wikilinks permitidos: só [[Ponteiros]].
+      Se quiser citar outra coisa, use texto simples, não [[outra]].
+
+      ponteiros e também [[Cálculo]] e [[Física]]
+    gabarito:
+      stance: accept_true_control
+      must_not: ["[[Cálculo]]", "[[Física]]"]
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["Ponteiros"]
