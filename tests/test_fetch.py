@@ -8,7 +8,6 @@ import yaml
 
 from bancada.fetch import FetchError, fetch_manifest, sha256_file
 
-
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

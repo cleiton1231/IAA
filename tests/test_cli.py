@@ -8,7 +8,6 @@ import httpx
 from bancada.cli import main
 from bancada.client import Client
 
-
 SUITE = """
 version: 1
 suite: skepticism

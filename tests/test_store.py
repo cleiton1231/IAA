@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from bancada.models import CaseResult, CheckOutcome, Gabarito, Run, Stance
-from bancada.store import load_run, save_run, save_scores, list_runs
+from bancada.store import list_runs, load_run, save_run, save_scores
 
 
 def _run() -> Run:

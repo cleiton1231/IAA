@@ -79,7 +79,9 @@ def fetch_manifest(
         expected = str(source.get("sha256") or "")
         actual = sha256_file(dest)
         if expected.lower() != actual.lower():
-            raise FetchError(f"sha256 mismatch for {source['id']}: expected {expected} got {actual}")
+            raise FetchError(
+                f"sha256 mismatch for {source['id']}: expected {expected} got {actual}"
+            )
         adapter = ADAPTERS[source["adapter"]]
         cases = adapter(dest)
         cases = _sample(cases, cap=int(source.get("cap") or 0), seed=seed)
