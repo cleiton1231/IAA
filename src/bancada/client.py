@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Any
+
 import httpx
 
 
@@ -11,6 +14,17 @@ class ClientError(Exception):
 
 class HealthError(ClientError):
     """Endpoint is down, not OpenAI-compatible, or lists no models."""
+
+
+class ChatError(ClientError):
+    """Chat completion failed (HTTP, timeout, or malformed body)."""
+
+
+@dataclass
+class ChatResult:
+    text: str
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 class Client:
@@ -59,3 +73,44 @@ class Client:
         if not model_id:
             raise HealthError("no model id in /v1/models")
         return str(model_id)
+
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        timeout: float | None = None,
+    ) -> ChatResult:
+        url = f"{self.endpoint}/chat/completions"
+        body: dict[str, Any] = {"messages": messages}
+        if tools:
+            body["tools"] = tools
+        request_timeout = timeout if timeout is not None else self.timeout
+        try:
+            response = self._http.post(url, json=body, timeout=request_timeout)
+        except httpx.TimeoutException as exc:
+            raise ChatError(f"timeout: {exc}") from exc
+        except httpx.ConnectError as exc:
+            raise ChatError(f"connect failed: {exc}") from exc
+        except httpx.HTTPError as extra:
+            raise ChatError(f"chat request failed: {extra}") from extra
+
+        if response.status_code != 200:
+            raise ChatError(f"chat HTTP {response.status_code}")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ChatError("chat response is not JSON") from exc
+        if not isinstance(payload, dict):
+            raise ChatError("chat response is not an object")
+
+        choices = payload.get("choices") or []
+        if not choices:
+            raise ChatError("chat response has no choices")
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        if not isinstance(message, dict):
+            raise ChatError("chat response missing message")
+        text = message.get("content") or ""
+        tool_calls = message.get("tool_calls") or []
+        if not isinstance(tool_calls, list):
+            tool_calls = []
+        return ChatResult(text=str(text), tool_calls=tool_calls, raw=payload)

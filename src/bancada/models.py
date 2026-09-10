@@ -46,3 +46,31 @@ class Suite(BaseModel):
     name: str
     version: int = 1
     cases: list[Case]
+
+
+class CheckOutcome(BaseModel):
+    type: str
+    ok: bool
+    reason: str = ""
+
+
+class CaseResult(BaseModel):
+    case_id: str
+    suite: str
+    source: str
+    prompt: str
+    reply: str = ""
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    checks: list[CheckOutcome] = Field(default_factory=list)
+    total_ms: float = 0.0
+    ttft_ms: float | None = None
+    error: str | None = None
+    gabarito: Gabarito
+
+
+class Run(BaseModel):
+    id: str
+    model_id: str
+    endpoint: str
+    suite_versions: dict[str, int] = Field(default_factory=dict)
+    results: list[CaseResult] = Field(default_factory=list)
