@@ -74,3 +74,4 @@ class Run(BaseModel):
     endpoint: str
     suite_versions: dict[str, int] = Field(default_factory=dict)
     results: list[CaseResult] = Field(default_factory=list)
+    judge_scores: dict[str, Any] | None = None
