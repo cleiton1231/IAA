@@ -15,8 +15,14 @@ bancada health --endpoint http://127.0.0.1:8080/v1
 # 2. (opcional) fatias públicas, ~1–2 MB de download, teto 50 MB
 bancada fetch
 
-# 3. suítes manuais (PT-BR, o seu uso)
-bancada run --endpoint http://127.0.0.1:8080/v1 --suites skepticism,code,obsidian,tools --no-imported
+# 3. teste prático completo (recomendado: progresso + nohup)
+./scripts/practical_run.sh
+# ou manual:
+bancada run --endpoint http://127.0.0.1:8080/v1 \
+  --suites skepticism,code,obsidian,tools --no-imported \
+  --max-tokens 1024
+
+bancada list
 
 # 4. cola o packet no Grok
 bancada export-judge RUN_ID --out reports/packet.md
@@ -25,6 +31,8 @@ bancada export-judge RUN_ID --out reports/packet.md
 bancada ingest-scores RUN_ID scores.json
 bancada diff RUN_A RUN_B
 ```
+
+`bancada run` imprime `[n/N] start|ok|fail` por caso (use `--quiet` para silenciar). `--max-tokens` (default 1024) evita que modelos “thinking” esgotem o timeout.
 
 O juiz lê `JUDGE.md`. Não inventa rubrica.
 
