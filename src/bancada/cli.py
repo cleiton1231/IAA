@@ -44,6 +44,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--no-imported", action="store_true")
     run.add_argument("--cap", type=int, default=None)
     run.add_argument("--timeout", type=float, default=60.0)
+    run.add_argument(
+        "--max-tokens",
+        type=int,
+        default=1024,
+        help="cap generation length (important for thinking models)",
+    )
+    run.add_argument("--quiet", action="store_true", help="suppress per-case progress")
     run.set_defaults(func=_cmd_run)
 
     export = sub.add_parser("export-judge")
@@ -97,9 +104,31 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         include_imported=include_imported,
         cap=args.cap,
     )
-    run = run_many(_client(args, client), suites, case_timeout=args.timeout)
+    total = sum(len(suite.cases) for suite in suites)
+
+    def on_progress(event: str, index: int, _total: int, case_id: str, *rest: object) -> None:
+        if args.quiet:
+            return
+        if event == "start":
+            print(f"[{index}/{total}] start {case_id}", flush=True)
+            return
+        machine_ok = bool(rest[0]) if rest else False
+        result = rest[1] if len(rest) > 1 else None
+        status = "ok" if machine_ok else "fail"
+        ms = getattr(result, "total_ms", 0.0) if result is not None else 0.0
+        err = getattr(result, "error", None) if result is not None else None
+        extra = f" error={err}" if err else ""
+        print(f"[{index}/{total}] {status} {case_id} {ms:.0f}ms{extra}", flush=True)
+
+    run = run_many(
+        _client(args, client),
+        suites,
+        case_timeout=args.timeout,
+        on_progress=None if args.quiet else on_progress,
+        max_tokens=args.max_tokens,
+    )
     save_run(Path(args.db), run)
-    print(f"saved {run.id}")
+    print(f"saved {run.id}", flush=True)
     return 0
 
 

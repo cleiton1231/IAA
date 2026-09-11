@@ -29,6 +29,32 @@ def _suite() -> Suite:
     )
 
 
+def test_runner_reports_progress_per_case() -> None:
+    events: list[tuple] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "toy-model"}]})
+        code = "```python\ndef reverse(s):\n    return s[::-1]\n```"
+        return httpx.Response(200, json={"choices": [{"message": {"content": code}}]})
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
+    from bancada.runner import run_many
+
+    run_many(
+        client,
+        [_suite()],
+        on_progress=lambda *args: events.append(args),
+    )
+    assert events[0][0] == "start"
+    assert events[0][1] == 1
+    assert events[0][2] == 1
+    assert events[0][3] == "code.reverse"
+    assert events[1][0] == "done"
+    assert events[1][3] == "code.reverse"
+    assert events[1][4] is True  # machine ok
+
+
 def test_runner_records_reply_checks_and_latency() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/models"):

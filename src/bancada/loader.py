@@ -23,7 +23,7 @@ def load_named_suites(
         path = root / f"{name}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"suite not found: {path}")
-        suites.append(_apply_cap(load_suite(path), cap if include_imported else None))
+        suites.append(_apply_cap(load_suite(path), cap))
         if include_imported:
             imported = root / "imported" / f"{name}.yaml"
             if imported.exists():

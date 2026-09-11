@@ -97,6 +97,35 @@ cases: []
         load_suite(path)
 
 
+def test_cap_applies_without_imported(tmp_path: Path) -> None:
+    path = tmp_path / "code.yaml"
+    path.write_text(
+        """
+version: 1
+suite: code
+cases:
+  - id: code.a
+    source: manual
+    prompt: a
+    gabarito: {stance: accept_true_control}
+  - id: code.b
+    source: manual
+    prompt: b
+    gabarito: {stance: accept_true_control}
+  - id: code.c
+    source: manual
+    prompt: c
+    gabarito: {stance: accept_true_control}
+""",
+        encoding="utf-8",
+    )
+    from bancada.loader import load_named_suites
+
+    suites = load_named_suites(tmp_path, ["code"], include_imported=False, cap=2)
+    assert len(suites) == 1
+    assert len(suites[0].cases) == 2
+
+
 def test_invalid_stance_fails(tmp_path: Path) -> None:
     path = tmp_path / "stance.yaml"
     path.write_text(
