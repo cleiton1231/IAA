@@ -37,6 +37,9 @@ def test_packet_includes_ids_gabarito_source_and_json_template() -> None:
     assert "O Python 4 não foi lançado." in text
     assert '"run_id": "run1"' in text
     assert "Leia `JUDGE.md`" in text
+    assert "### Tool calls" in text
+    tool_section = text.split("### Tool calls", 1)[1].split("score:", 1)[0]
+    assert "(none)" in tool_section
 
 
 def test_packet_includes_tool_calls_json() -> None:

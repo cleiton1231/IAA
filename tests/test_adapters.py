@@ -22,6 +22,7 @@ def test_humaneval_case_has_python_test_and_stable_id() -> None:
     assert "check(add)" in (py.source or "")
     assert py.setup is not None
     assert "def add" in py.setup
+    assert "Complete the following" not in py.setup
 
 
 def test_bfcl_simple_expects_tool_and_irrelevance_expects_none() -> None:

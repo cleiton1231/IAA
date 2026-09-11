@@ -10,6 +10,14 @@ def test_extract_code_takes_fenced_python_block() -> None:
     assert "return s[::-1]" in extract_code(text)
 
 
+def test_extract_code_preserves_leading_indent() -> None:
+    text = "```python\n    for x in xs:\n        return True\n    return False\n```"
+    lines = extract_code(text).splitlines()
+    assert lines[0].startswith("    for")
+    assert lines[1].startswith("        return True")
+    assert lines[2].startswith("    return False")
+
+
 def test_python_test_passes_when_extracted_code_satisfies_assert() -> None:
     reply = "```python\ndef reverse(s):\n    return s[::-1]\n```"
     checks = [MachineCheck(type="python_test", source='assert reverse("ab") == "ba"')]
@@ -58,6 +66,58 @@ def test_python_test_does_not_double_prepend_when_signature_already_present() ->
     ]
     results = run_checks(reply, checks, tool_calls=None)
     assert results[0].ok is True
+
+
+def test_python_test_keeps_relative_indent_of_multiline_body() -> None:
+    reply = "```python\n    for x in xs:\n        return True\n    return False\n```"
+    checks = [
+        MachineCheck(
+            type="python_test",
+            setup="def foo(xs):\n",
+            source="assert foo([]) is False\nassert foo([1]) is True",
+        )
+    ]
+    results = run_checks(reply, checks, tool_calls=None)
+    assert results[0].ok is True
+
+
+def test_python_test_keeps_comment_then_def_at_module_level() -> None:
+    reply = "```python\n# helper\ndef foo():\n    return True\n```"
+    checks = [
+        MachineCheck(
+            type="python_test",
+            setup="def foo():\n    return False\n",
+            source="assert foo() is True",
+        )
+    ]
+    results = run_checks(reply, checks, tool_calls=None)
+    assert results[0].ok is True
+
+
+def test_python_test_prepends_missing_typing_import_for_full_def() -> None:
+    reply = (
+        "```python\n"
+        "def foo(xs: List[int]) -> bool:\n"
+        "    return isinstance(xs, List) and not xs\n"
+        "```"
+    )
+    checks = [
+        MachineCheck(
+            type="python_test",
+            setup=(
+                "from typing import List\n\n"
+                "def foo(xs: List[int]) -> bool:\n"
+                '    """doc"""\n'
+            ),
+            source="assert foo([]) is True",
+        )
+    ]
+    results = run_checks(reply, checks, tool_calls=None)
+    assert results[0].ok is True
+    without_setup = [
+        MachineCheck(type="python_test", source="assert foo([]) is True")
+    ]
+    assert run_checks(reply, without_setup, tool_calls=None)[0].ok is False
 
 
 def test_wikilink_allowlist_rejects_unknown_targets() -> None:

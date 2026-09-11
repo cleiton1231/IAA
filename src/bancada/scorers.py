@@ -26,9 +26,8 @@ class CheckResult:
 
 def extract_code(text: str) -> str:
     match = FENCE_RE.search(text or "")
-    if match:
-        return match.group(1).strip()
-    return (text or "").strip()
+    raw = match.group(1) if match else (text or "")
+    return raw.strip("\n").rstrip()
 
 
 def run_checks(
@@ -96,11 +95,19 @@ def _python_test(reply: str, source: str, setup: str | None = None) -> CheckResu
 
 def _body_after_setup(code: str) -> str:
     first = next((line for line in code.splitlines() if line.strip()), "")
-    if first[:1].isspace() or first.startswith(
-        ("def ", "async def ", "class ", "from ", "import ", "@")
-    ):
+    if first[:1].isspace() or _has_flush_left_definition(code):
         return code
     return "\n".join(f"    {line}" if line else line for line in code.splitlines())
+
+
+def _has_flush_left_definition(code: str) -> bool:
+    prefixes = ("def ", "async def ", "class ", "from ", "import ", "@")
+    for line in code.splitlines():
+        if not line.strip() or line[:1].isspace():
+            continue
+        if line.startswith(prefixes):
+            return True
+    return False
 
 
 def _wikilinks(reply: str, allowed: list[str]) -> CheckResult:
