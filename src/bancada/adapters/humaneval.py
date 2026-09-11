@@ -31,6 +31,7 @@ def adapt_humaneval(path: Path | str) -> list[Case]:
                     MachineCheck(
                         type="python_test",
                         source=f"{test}\ncheck({entry})\n",
+                        setup=prompt,
                     )
                 ],
             )

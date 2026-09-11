@@ -49,7 +49,7 @@ def _run_one(
         ok = bool(code)
         return CheckResult("extract_code", ok, "" if ok else "no code extracted")
     if check.type == "python_test":
-        return _python_test(reply, check.source or "")
+        return _python_test(reply, check.source or "", check.setup)
     if check.type == "wikilink_allowlist":
         return _wikilinks(reply, check.allowed or [])
     if check.type == "tool_name":
@@ -60,9 +60,14 @@ def _run_one(
     return CheckResult(check.type, False, f"unknown check {check.type}")
 
 
-def _python_test(reply: str, source: str) -> CheckResult:
+def _python_test(reply: str, source: str, setup: str | None = None) -> CheckResult:
     code = extract_code(reply)
-    script = f"{code}\n{source}\n"
+    if setup and setup.strip() not in code:
+        body = _body_after_setup(code)
+        prefix = setup if setup.endswith("\n") else f"{setup}\n"
+        script = f"{prefix}{body}\n{source}\n"
+    else:
+        script = f"{code}\n{source}\n"
     env = {
         "PATH": os.environ.get("PATH", ""),
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -87,6 +92,15 @@ def _python_test(reply: str, source: str) -> CheckResult:
         err = (proc.stderr or proc.stdout or "failed").strip().splitlines()[-1]
         return CheckResult("python_test", False, err)
     return CheckResult("python_test", True, "")
+
+
+def _body_after_setup(code: str) -> str:
+    first = next((line for line in code.splitlines() if line.strip()), "")
+    if first[:1].isspace() or first.startswith(
+        ("def ", "async def ", "class ", "from ", "import ", "@")
+    ):
+        return code
+    return "\n".join(f"    {line}" if line else line for line in code.splitlines())
 
 
 def _wikilinks(reply: str, allowed: list[str]) -> CheckResult:

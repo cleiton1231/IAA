@@ -32,6 +32,34 @@ def test_python_test_fails_when_code_times_out() -> None:
     assert "timeout" in results[0].reason.lower()
 
 
+def test_python_test_prepends_setup_for_body_only_completion() -> None:
+    reply = "```python\nreturn True\n```"
+    checks = [
+        MachineCheck(
+            type="python_test",
+            setup="def foo():\n",
+            source="assert foo() is True",
+        )
+    ]
+    results = run_checks(reply, checks, tool_calls=None)
+    assert results[0].ok is True
+    without_setup = [MachineCheck(type="python_test", source="assert foo() is True")]
+    assert run_checks(reply, without_setup, tool_calls=None)[0].ok is False
+
+
+def test_python_test_does_not_double_prepend_when_signature_already_present() -> None:
+    reply = "```python\ndef foo():\n    return True\n```"
+    checks = [
+        MachineCheck(
+            type="python_test",
+            setup="def foo():\n",
+            source="assert foo() is True",
+        )
+    ]
+    results = run_checks(reply, checks, tool_calls=None)
+    assert results[0].ok is True
+
+
 def test_wikilink_allowlist_rejects_unknown_targets() -> None:
     reply = "Ver [[Ponteiros]] e [[Marte]]."
     checks = [MachineCheck(type="wikilink_allowlist", allowed=["Ponteiros", "AEDS1"])]

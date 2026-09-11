@@ -30,6 +30,7 @@ class MachineCheck(BaseModel):
     allowed: list[str] | None = None
     expected: str | None = None
     pattern: str | None = None
+    setup: str | None = None
 
 
 class Case(BaseModel):

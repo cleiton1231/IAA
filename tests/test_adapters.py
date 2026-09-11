@@ -20,6 +20,8 @@ def test_humaneval_case_has_python_test_and_stable_id() -> None:
     assert "def add" in case.prompt
     py = [c for c in case.machine_checks if c.type == "python_test"][0]
     assert "check(add)" in (py.source or "")
+    assert py.setup is not None
+    assert "def add" in py.setup
 
 
 def test_bfcl_simple_expects_tool_and_irrelevance_expects_none() -> None:
