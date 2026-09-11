@@ -26,8 +26,8 @@ if [[ -f "$PIDFILE" ]]; then
 fi
 
 echo "starting run suites=$SUITES log=$LOG"
-# setsid detaches from the parent job control / tool wrapper
-setsid -w python -m bancada.cli run \
+# nohup so the tool wrapper timeout cannot kill the bench
+nohup python -m bancada.cli run \
   --endpoint "$ENDPOINT" \
   --suites "$SUITES" \
   --no-imported \
@@ -40,6 +40,7 @@ PID="$(cat "$PIDFILE")"
 printf '%s\n%s\n' "$PID" "$LOG" >"$DIR/bancada_practical.path"
 echo "pid=$PID"
 
+LAST=""
 # wait until saved line appears or process dies
 while true; do
   if grep -qE '^saved [0-9a-f]+$' "$LOG" 2>/dev/null; then
@@ -57,7 +58,10 @@ while true; do
     tail -50 "$LOG" || true
     exit 1
   fi
-  # show latest progress line
-  tail -1 "$LOG" 2>/dev/null || true
+  LINE="$(tail -1 "$LOG" 2>/dev/null || true)"
+  if [[ -n "$LINE" && "$LINE" != "$LAST" ]]; then
+    echo "$LINE"
+    LAST="$LINE"
+  fi
   sleep 10
 done
