@@ -80,8 +80,22 @@ def _case_block(result: CaseResult) -> list[str]:
         (result.reply or "").rstrip() or "(empty)",
         "```",
         "",
+        "### Tool calls",
+        "",
+        *_tool_calls_body(result),
+        "",
         "score:",
         "",
+    ]
+
+
+def _tool_calls_body(result: CaseResult) -> list[str]:
+    if not result.tool_calls:
+        return ["(none)"]
+    return [
+        "```json",
+        json.dumps(result.tool_calls, ensure_ascii=False, indent=2),
+        "```",
     ]
 
 

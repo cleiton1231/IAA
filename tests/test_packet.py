@@ -37,3 +37,28 @@ def test_packet_includes_ids_gabarito_source_and_json_template() -> None:
     assert "O Python 4 não foi lançado." in text
     assert '"run_id": "run1"' in text
     assert "Leia `JUDGE.md`" in text
+
+
+def test_packet_includes_tool_calls_json() -> None:
+    run = Run(
+        id="run-tools",
+        model_id="toy-model",
+        endpoint="http://127.0.0.1:8080/v1",
+        suite_versions={"tools": 1},
+        results=[
+            CaseResult(
+                case_id="tools.cron",
+                suite="tools",
+                source="imported.bfcl",
+                prompt="agende um cron",
+                reply="",
+                tool_calls=[{"function": {"name": "cron", "arguments": "{}"}}],
+                checks=[],
+                total_ms=10.0,
+                gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+            )
+        ],
+    )
+    text = render_packet(run)
+    assert "### Tool calls" in text
+    assert '"name": "cron"' in text
