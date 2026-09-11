@@ -9,9 +9,10 @@ from pathlib import Path
 
 from bancada.client import Client
 from bancada.loader import load_named_suites
+from bancada.models import Run
 from bancada.packet import render_packet
 from bancada.runner import run_many
-from bancada.store import load_run, save_run, save_scores
+from bancada.store import list_runs, load_run, save_run, save_scores
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
 
@@ -68,6 +69,10 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--raw-dir", default="data/raw")
     fetch.add_argument("--suites-dir", default="suites")
     fetch.set_defaults(func=_cmd_fetch)
+
+    listing = sub.add_parser("list")
+    listing.add_argument("--db", default="data/bancada.sqlite")
+    listing.set_defaults(func=_cmd_list)
     return parser
 
 
@@ -146,28 +151,52 @@ def _cmd_fetch(args: argparse.Namespace, client: Client | None) -> int:
     return 0
 
 
-def _format_diff(run_a, run_b) -> str:
-    def pass_rate(run) -> float:
-        checks = [c.ok for item in run.results for c in item.checks]
-        if not checks:
-            return 0.0
-        return sum(1 for ok in checks if ok) / len(checks)
+def _cmd_list(args: argparse.Namespace, client: Client | None) -> int:
+    del client
+    for run in list_runs(Path(args.db)):
+        print(_format_run_line(run))
+    return 0
 
-    def judge_avg(run) -> str:
-        scores = run.judge_scores
-        if not scores:
-            return "n/a"
-        cases = scores.get("cases") or []
-        vals = [c.get("score") for c in cases if isinstance(c.get("score"), (int, float))]
-        if not vals:
-            return "n/a"
-        return f"{sum(vals) / len(vals):.2f}"
+
+def _machine_pass(run: Run) -> float:
+    checks = [c.ok for item in run.results for c in item.checks]
+    if not checks:
+        return 0.0
+    return sum(1 for ok in checks if ok) / len(checks)
+
+
+def _judge_avg(run: Run) -> float | None:
+    scores = run.judge_scores
+    if not scores:
+        return None
+    cases = scores.get("cases") or []
+    vals = [c.get("score") for c in cases if isinstance(c.get("score"), (int, float))]
+    if not vals:
+        return None
+    return sum(vals) / len(vals)
+
+
+def _format_run_line(run: Run) -> str:
+    line = (
+        f"{run.id}  model={run.model_id}  cases={len(run.results)}  "
+        f"machine_pass={_machine_pass(run):.2f}"
+    )
+    judge = _judge_avg(run)
+    if judge is not None:
+        line += f"  judge={judge:.2f}"
+    return line
+
+
+def _format_diff(run_a: Run, run_b: Run) -> str:
+    def judge_label(run: Run) -> str:
+        avg = _judge_avg(run)
+        return "n/a" if avg is None else f"{avg:.2f}"
 
     return (
-        f"{run_a.id} model={run_a.model_id} machine_pass={pass_rate(run_a):.2f} "
-        f"judge={judge_avg(run_a)}\n"
-        f"{run_b.id} model={run_b.model_id} machine_pass={pass_rate(run_b):.2f} "
-        f"judge={judge_avg(run_b)}"
+        f"{run_a.id} model={run_a.model_id} machine_pass={_machine_pass(run_a):.2f} "
+        f"judge={judge_label(run_a)}\n"
+        f"{run_b.id} model={run_b.model_id} machine_pass={_machine_pass(run_b):.2f} "
+        f"judge={judge_label(run_b)}"
     )
 
 
