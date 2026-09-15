@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS runs (
     model_id TEXT NOT NULL,
     endpoint TEXT NOT NULL,
     suite_versions TEXT NOT NULL,
+    max_tokens INTEGER,
+    timeout REAL,
+    temperature REAL,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE TABLE IF NOT EXISTS case_results (
@@ -36,6 +39,15 @@ def _connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    cursor = conn.execute("PRAGMA table_info(runs)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    for col, col_type in [
+        ("max_tokens", "INTEGER"),
+        ("timeout", "REAL"),
+        ("temperature", "REAL"),
+    ]:
+        if col not in existing_cols:
+            conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {col_type}")
     return conn
 
 
@@ -43,8 +55,20 @@ def save_run(path: Path | str, run: Run) -> None:
     conn = _connect(Path(path))
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO runs (id, model_id, endpoint, suite_versions) VALUES (?,?,?,?)",
-            (run.id, run.model_id, run.endpoint, json.dumps(run.suite_versions)),
+            """
+            INSERT OR REPLACE INTO runs
+            (id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (
+                run.id,
+                run.model_id,
+                run.endpoint,
+                json.dumps(run.suite_versions),
+                run.max_tokens,
+                run.timeout,
+                run.temperature,
+            ),
         )
         conn.execute("DELETE FROM case_results WHERE run_id = ?", (run.id,))
         for seq, result in enumerate(run.results):
@@ -61,7 +85,10 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
     conn = _connect(Path(path))
     try:
         row = conn.execute(
-            "SELECT id, model_id, endpoint, suite_versions FROM runs WHERE id = ?",
+            """
+            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature
+            FROM runs WHERE id = ?
+            """,
             (run_id,),
         ).fetchone()
         if row is None:
@@ -79,10 +106,45 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
             model_id=row[1],
             endpoint=row[2],
             suite_versions=json.loads(row[3]),
+            max_tokens=row[4],
+            timeout=row[5],
+            temperature=row[6],
             results=[json.loads(item[0]) for item in payloads],
             judge_scores=json.loads(score_row[0]) if score_row else None,
         )
         return run
+    finally:
+        conn.close()
+
+
+def find_resumable_run(
+    path: Path | str,
+    model_id: str,
+    suite_versions: dict[str, int],
+    run_id: str | None = None,
+) -> Run | None:
+    if run_id:
+        cand = load_run(path, run_id)
+        if cand and cand.model_id == model_id:
+            if all(cand.suite_versions.get(k) == v for k, v in suite_versions.items()):
+                return cand
+        return None
+
+    conn = _connect(Path(path))
+    try:
+        query = (
+            "SELECT id, suite_versions FROM runs "
+            "WHERE model_id = ? ORDER BY created_at DESC, id DESC"
+        )
+        rows = conn.execute(query, (model_id,)).fetchall()
+        for cand_id, versions_json in rows:
+            try:
+                v_dict = json.loads(versions_json)
+            except Exception:
+                continue
+            if all(v_dict.get(k) == v for k, v in suite_versions.items()):
+                return load_run(path, cand_id)
+        return None
     finally:
         conn.close()
 

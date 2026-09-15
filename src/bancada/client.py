@@ -81,6 +81,7 @@ class Client:
         timeout: float | None = None,
         model: str | None = None,
         max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> ChatResult:
         url = f"{self.endpoint}/chat/completions"
         body: dict[str, Any] = {"messages": messages}
@@ -90,6 +91,8 @@ class Client:
             body["model"] = model
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
+        if temperature is not None:
+            body["temperature"] = temperature
         request_timeout = timeout if timeout is not None else self.timeout
         try:
             response = self._http.post(url, json=body, timeout=request_timeout)

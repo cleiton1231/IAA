@@ -29,13 +29,39 @@ def _run() -> Run:
 
 def test_save_and_load_run(tmp_path: Path) -> None:
     db = tmp_path / "bancada.sqlite"
-    save_run(db, _run())
+    run = _run()
+    run.max_tokens = 512
+    run.timeout = 45.0
+    run.temperature = 0.7
+    save_run(db, run)
     loaded = load_run(db, "abc123")
     assert loaded is not None
     assert loaded.model_id == "toy-model"
+    assert loaded.max_tokens == 512
+    assert loaded.timeout == 45.0
+    assert loaded.temperature == 0.7
     assert loaded.results[0].case_id == "code.reverse"
     assert loaded.results[0].checks[0].ok is True
     assert loaded.results[0].gabarito.stance == Stance.ACCEPT_TRUE_CONTROL
+
+
+def test_find_resumable_run(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    save_run(db, run)
+
+    # Match by model and suite_versions
+    found = find_resumable_run(db, "toy-model", {"code": 1})
+    assert found is not None
+    assert found.id == "abc123"
+
+    # Mismatch model
+    assert find_resumable_run(db, "other-model", {"code": 1}) is None
+
+    # Mismatch version
+    assert find_resumable_run(db, "toy-model", {"code": 2}) is None
 
 
 def test_list_runs_newest_first(tmp_path: Path) -> None:

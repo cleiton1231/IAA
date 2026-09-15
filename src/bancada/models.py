@@ -36,16 +36,20 @@ class MachineCheck(BaseModel):
 class Case(BaseModel):
     id: str
     suite: str = ""
+    category: str = ""
     source: str = "manual"
     prompt: str
     tools: list[dict[str, Any]] | None = None
     gabarito: Gabarito
     machine_checks: list[MachineCheck] = Field(default_factory=list)
+    fake_tool_response: str | None = None
+    turn2_prompt: str | None = None
 
 
 class Suite(BaseModel):
     name: str
     version: int = 1
+    category: str = ""
     cases: list[Case]
 
 
@@ -58,10 +62,13 @@ class CheckOutcome(BaseModel):
 class CaseResult(BaseModel):
     case_id: str
     suite: str
+    category: str = ""
     source: str
     prompt: str
     reply: str = ""
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    turn1_reply: str | None = None
+    turn1_tool_calls: list[dict[str, Any]] | None = None
     checks: list[CheckOutcome] = Field(default_factory=list)
     total_ms: float = 0.0
     ttft_ms: float | None = None
@@ -76,3 +83,6 @@ class Run(BaseModel):
     suite_versions: dict[str, int] = Field(default_factory=dict)
     results: list[CaseResult] = Field(default_factory=list)
     judge_scores: dict[str, Any] | None = None
+    max_tokens: int | None = None
+    timeout: float | None = None
+    temperature: float | None = None
