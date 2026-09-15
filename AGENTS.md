@@ -25,9 +25,16 @@ pip install -e '.[dev]'
 pytest                              # deve passar (rede zero)
 curl -sS -m 3 http://127.0.0.1:8080/v1/models   # humano já deve ter o server
 python -m bancada.cli health --endpoint http://127.0.0.1:8080/v1
+python -m bancada.cli smoke --endpoint http://127.0.0.1:8080/v1  # valida 1 caso por suíte
 ```
 
 Se `health` falhar: pare e peça ao humano para ativar o modelo. Não invente endpoint.
+
+---
+
+## Orquestrador: Grok no chat vs GLM Flash no OpenCode
+
+O orquestrador estratégico e juiz de qualidade é o modelo no chat principal (Grok), que avalia rubricas de alto nível, decide trade-offs e julga os packets exportados sem viés de fluência. Tarefas operacionais de codificação rápida, refactors e execução de testes em loop fechado podem ser delegadas a modelos ágeis e econômicos (como GLM Flash no OpenCode), que atuam como implementadores atômicos sob a direção do orquestrador. O humano mantém-se focado estritamente na gestão do hardware e troca de GGUFs no llama-server.
 
 ---
 
@@ -58,7 +65,7 @@ O script:
 1. Checa `health`
 2. Roda as suítes manuais com **nohup** (não morre se a sessão do agente cair)
 3. Imprime progresso `[n/N] start|ok|fail`
-4. No fim: `list` + exporta `reports/packet-<RUN_ID>.md`
+4. No fim: `list` + exporta packet categorizado `reports/packet-<RUN_ID>.md`
 
 Log ao vivo:
 
@@ -88,10 +95,13 @@ python -m bancada.cli export-judge RUN_ID --db data/bancada.sqlite --out reports
 |------|---------|---------|
 | `--max-tokens` | `1024` | Modelos “thinking” (ex.: Qwen3.5) sem teto estouram timeout |
 | `--timeout` | `60` (script usa `90`) | Por caso |
-| `--no-imported` | — | Só suítes manuais PT-BR (~34 casos). Rápido o bastante pra comparar modelos |
+| `--resume` | off | Retoma run incompleto para o mesmo `model_id` + `suite_versions` |
+| `--no-imported` | — | Só suítes manuais PT-BR (~36 casos). Rápido o bastante pra comparar modelos |
 | `--imported` | off | Soma HumanEval/BFCL/TruthfulQA/… depois do `fetch` |
 | `--cap N` | none | Limita casos (manual **e** imported) |
 | `--quiet` | off | Sem linhas `[n/N]` |
+
+Ao final de cada `run` e `smoke`, a CLI imprime o resumo: `pass N/M (XX%) | p50: XX.Xms`.
 
 Env do script: `BANCADA_ENDPOINT`, `BANCADA_DB`, `BANCADA_TIMEOUT`, `BANCADA_MAX_TOKENS`.
 
@@ -104,16 +114,18 @@ Env do script: `BANCADA_ENDPOINT`, `BANCADA_DB`, `BANCADA_TIMEOUT`, `BANCADA_MAX
 
 ---
 
-## Suítes
+## Suítes e Categorias
 
-### Manuais (`suites/*.yaml`) — default do teste prático
+As suítes são agrupadas em 4 categorias (peso 25% cada no `JUDGE.md`):
 
-| Suíte | Mede |
-|-------|------|
-| `code` | Funções Python + `python_test` executável |
-| `obsidian` | Nota limpa, `[[wikilinks]]`, não inventar matéria |
-| `tools` | `cron` / `exec` estilo nanobot; recusar `rm -rf` |
-| `skepticism` | Premissa falsa, sycophancy, controles verdadeiros |
+| Categoria | Suíte Manual | Suíte Importada | Mede |
+|---|---|---|---|
+| `codigo` | `code` | `humaneval` | Funções Python + `python_test` executável |
+| `humanas` | `obsidian` | — | Nota limpa, `[[wikilinks]]`, não inventar matéria |
+| `agentico` | `tools` | `bfcl` | `cron`/`exec` nanobot; recusa `rm -rf`; casos em 2 turnos |
+| `ceticismo` | `skepticism` | `truthfulqa` | Premissa falsa, sycophancy, controles verdadeiros |
+
+Casos de 2 turnos em `tools`: no turno 1 o modelo emite a chamada de ferramenta, o runner injeta a saída simulada (`fake_tool_response`) e, no turno 2, o modelo deve consumir a resposta ou recusar comandos perigosos.
 
 ### Importadas (`suites/imported/` após fetch)
 

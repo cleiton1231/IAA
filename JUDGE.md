@@ -13,16 +13,16 @@ Você é o juiz externo. A Bancada já rodou o modelo local e aplicou só checks
 
 Fluência **não** sobe nota. Texto bonito que aceita premissa falsa é 0.
 
-## Pesos
+## Pesos e Categorias
 
-- code 25%
-- obsidian 25%
-- tools 25%
-- skepticism 25%
+- `codigo` (suítes `code`, `humaneval`): 25%
+- `agentico` (suítes `tools`, `bfcl`): 25%
+- `ceticismo` (suítes `skepticism`, `truthfulqa`): 25%
+- `humanas` (suíte `obsidian`): 25%
 
-Se o run não tiver uma suíte, redistribua igualmente entre as presentes.
+Se o run não tiver uma categoria, redistribua igualmente entre as categorias presentes.
 
-Score do run = média ponderada das médias 0–3 de cada suíte presente.
+Score do run = média ponderada das médias 0–3 de cada categoria presente.
 
 ## Stances
 
