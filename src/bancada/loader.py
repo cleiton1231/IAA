@@ -31,10 +31,26 @@ def load_named_suites(
     return suites
 
 
+DEFAULT_CATEGORIES: dict[str, str] = {
+    "code": "codigo",
+    "tools": "agentico",
+    "skepticism": "ceticismo",
+    "obsidian": "humanas",
+    "humaneval": "codigo",
+    "bfcl": "agentico",
+    "truthfulqa": "ceticismo",
+}
+
+
 def _apply_cap(suite: Suite, cap: int | None) -> Suite:
     if cap is None or cap <= 0 or len(suite.cases) <= cap:
         return suite
-    return Suite(name=suite.name, version=suite.version, cases=suite.cases[:cap])
+    return Suite(
+        name=suite.name,
+        version=suite.version,
+        category=suite.category,
+        cases=suite.cases[:cap],
+    )
 
 
 def load_suite(path: Path | str) -> Suite:
@@ -51,6 +67,9 @@ def load_suite(path: Path | str) -> Suite:
     if not cases_raw:
         raise ValueError(f"{path}: empty suite")
 
+    suite_name = str(name)
+    suite_cat = str(raw.get("category") or DEFAULT_CATEGORIES.get(suite_name, suite_name))
+
     cases: list[Case] = []
     seen: set[str] = set()
     for item in cases_raw:
@@ -58,18 +77,53 @@ def load_suite(path: Path | str) -> Suite:
             raise ValueError(f"{path}: case must be a mapping")
         if "gabarito" not in item:
             raise ValueError(f"{path}: case {item.get('id', '?')} missing gabarito")
+        case_suite = item.get("suite") or suite_name
+        case_cat = item.get("category") or DEFAULT_CATEGORIES.get(case_suite, suite_cat)
         try:
-            case = Case.model_validate({**item, "suite": item.get("suite") or name})
+            case = Case.model_validate(
+                {
+                    **item,
+                    "suite": case_suite,
+                    "category": case_cat,
+                }
+            )
         except ValidationError as exc:
             _reraise_stance(path, item, exc)
             raise ValueError(f"{path}: invalid case {item.get('id', '?')}: {exc}") from exc
         if case.id in seen:
             raise ValueError(f"{path}: duplicate case id {case.id}")
         seen.add(case.id)
+
+        # Enhance machine checks with must_cover, must_not, and stance
+        checks = list(case.machine_checks)
+        for pattern in case.gabarito.must_cover:
+            if not any(
+                c.type == "must_cover" and (c.pattern == pattern or c.expected == pattern)
+                for c in checks
+            ):
+                from bancada.models import MachineCheck
+
+                checks.append(MachineCheck(type="must_cover", pattern=pattern))
+        for pattern in case.gabarito.must_not:
+            if not any(
+                c.type == "must_not" and (c.pattern == pattern or c.expected == pattern)
+                for c in checks
+            ):
+                from bancada.models import MachineCheck
+
+                checks.append(MachineCheck(type="must_not", pattern=pattern))
+        is_skeptic = case.suite == "skepticism" or case.category == "ceticismo"
+        if is_skeptic and not any(c.type == "stance" for c in checks):
+            from bancada.models import MachineCheck
+
+            checks.append(MachineCheck(type="stance", expected=case.gabarito.stance.value))
+        case.machine_checks = checks
+
         cases.append(case)
 
     version = int(raw.get("version", 1))
-    return Suite(name=str(name), version=version, cases=cases)
+    return Suite(name=suite_name, version=version, category=suite_cat, cases=cases)
+
 
 
 def _reraise_stance(path: Path, item: dict[str, Any], exc: ValidationError) -> None:

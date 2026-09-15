@@ -192,3 +192,98 @@ def test_list_prints_runs_newest_first_with_judge(tmp_path: Path, capsys) -> Non
     assert "model=toy-model  cases=1  machine_pass=1.00" in by_id[run_b]
     assert "judge=3.00" in by_id[run_b]
     assert "judge=" not in by_id[run_a]
+
+
+def test_smoke_runs_one_case_per_suite(tmp_path: Path, capsys) -> None:
+    suites = tmp_path / "suites"
+    suites.mkdir()
+    (suites / "skepticism.yaml").write_text(SUITE, encoding="utf-8")
+    client = _client()
+
+    code = main(
+        [
+            "smoke",
+            "--suites",
+            "skepticism",
+            "--suites-dir",
+            str(suites),
+        ],
+        client=client,
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "pass 1/1" in out
+    assert "p50:" in out
+
+
+def test_smoke_fails_if_health_fails(tmp_path: Path, capsys) -> None:
+    suites = tmp_path / "suites"
+    suites.mkdir()
+    (suites / "skepticism.yaml").write_text(SUITE, encoding="utf-8")
+
+    def broken_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "server dead"})
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(broken_handler))
+    code = main(
+        [
+            "smoke",
+            "--suites",
+            "skepticism",
+            "--suites-dir",
+            str(suites),
+        ],
+        client=client,
+    )
+    assert code != 0
+    err = capsys.readouterr().err
+    assert "error:" in err
+
+
+def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
+    suites = tmp_path / "suites"
+    suites.mkdir()
+    (suites / "skepticism.yaml").write_text(SUITE, encoding="utf-8")
+    db = tmp_path / "bancada.sqlite"
+    client = _client()
+
+    # First run
+    code = main(
+        [
+            "run",
+            "--suites",
+            "skepticism",
+            "--suites-dir",
+            str(suites),
+            "--db",
+            str(db),
+            "--no-imported",
+        ],
+        client=client,
+    )
+    assert code == 0
+    out1 = capsys.readouterr().out
+    assert "pass 1/1" in out1
+    assert "p50:" in out1
+    assert "saved " in out1
+
+    # Second run with --resume
+    code2 = main(
+        [
+            "run",
+            "--suites",
+            "skepticism",
+            "--suites-dir",
+            str(suites),
+            "--db",
+            str(db),
+            "--no-imported",
+            "--resume",
+        ],
+        client=client,
+    )
+    assert code2 == 0
+    out2 = capsys.readouterr().out
+    assert "resuming run " in out2
+    assert "pass 1/1" in out2
+    assert "saved " in out2

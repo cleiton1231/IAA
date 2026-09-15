@@ -65,3 +65,46 @@ def test_packet_includes_tool_calls_json() -> None:
     text = render_packet(run)
     assert "### Tool calls" in text
     assert '"name": "cron"' in text
+
+
+def test_packet_categorization_and_summary_table() -> None:
+    run = Run(
+        id="run-categories",
+        model_id="toy-model",
+        endpoint="http://127.0.0.1:8080/v1",
+        suite_versions={"code": 1, "tools": 1},
+        results=[
+            CaseResult(
+                case_id="code.rev",
+                suite="code",
+                category="codigo",
+                source="manual",
+                prompt="rev",
+                reply="def rev(): pass",
+                checks=[CheckOutcome(type="not_empty", ok=True)],
+                total_ms=50.0,
+                gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+            ),
+            CaseResult(
+                case_id="tools.cron",
+                suite="tools",
+                category="agentico",
+                source="manual",
+                prompt="cron",
+                reply="ok",
+                checks=[CheckOutcome(type="not_empty", ok=True)],
+                total_ms=100.0,
+                gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+            ),
+        ],
+    )
+    text = render_packet(run)
+    assert "## Resumo máquina" in text
+    assert "| Categoria | n | machine_pass | p50_ms |" in text
+    assert "| codigo | 1 | 1/1 (100%) | 50.0 |" in text
+    assert "| agentico | 1 | 1/1 (100%) | 100.0 |" in text
+    assert "| **total** | 2 | 2/2 (100%) |" in text
+    assert "## Categoria: codigo" in text
+    assert "## Categoria: agentico" in text
+    assert "### code.rev" in text
+    assert "### tools.cron" in text

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from bancada.loader import load_named_suites
 from bancada.models import Run
 from bancada.packet import render_packet
 from bancada.runner import run_many
-from bancada.store import list_runs, load_run, save_run, save_scores
+from bancada.store import find_resumable_run, list_runs, load_run, save_run, save_scores
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
 
@@ -35,6 +36,21 @@ def _parser() -> argparse.ArgumentParser:
     health.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     health.set_defaults(func=_cmd_health)
 
+    smoke = sub.add_parser("smoke", help="run 1 case per suite for quick validation")
+    smoke.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    smoke.add_argument(
+        "--suites",
+        default="skepticism,code,obsidian,tools",
+        help="comma-separated suite names",
+    )
+    smoke.add_argument("--suites-dir", default="suites")
+    smoke.add_argument("--db", default=None, help="optional sqlite path")
+    smoke.add_argument("--timeout", type=float, default=60.0)
+    smoke.add_argument("--max-tokens", type=int, default=1024)
+    smoke.add_argument("--temperature", type=float, default=None)
+    smoke.add_argument("--quiet", action="store_true")
+    smoke.set_defaults(func=_cmd_smoke)
+
     run = sub.add_parser("run")
     run.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     run.add_argument("--suites", required=True, help="comma-separated suite names")
@@ -49,6 +65,12 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=1024,
         help="cap generation length (important for thinking models)",
+    )
+    run.add_argument("--temperature", type=float, default=None)
+    run.add_argument(
+        "--resume",
+        action="store_true",
+        help="resume previous incomplete run for this model and suites",
     )
     run.add_argument("--quiet", action="store_true", help="suppress per-case progress")
     run.set_defaults(func=_cmd_run)
@@ -95,14 +117,15 @@ def _cmd_health(args: argparse.Namespace, client: Client | None) -> int:
     return 0
 
 
-def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
+def _cmd_smoke(args: argparse.Namespace, client: Client | None) -> int:
+    c = _client(args, client)
+    c.health()  # Raises HealthError if health check fails
     names = [part.strip() for part in args.suites.split(",") if part.strip()]
-    include_imported = bool(args.imported) and not args.no_imported
     suites = load_named_suites(
         args.suites_dir,
         names,
-        include_imported=include_imported,
-        cap=args.cap,
+        include_imported=False,
+        cap=1,
     )
     total = sum(len(suite.cases) for suite in suites)
 
@@ -121,13 +144,85 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         print(f"[{index}/{total}] {status} {case_id} {ms:.0f}ms{extra}", flush=True)
 
     run = run_many(
-        _client(args, client),
+        c,
         suites,
         case_timeout=args.timeout,
         on_progress=None if args.quiet else on_progress,
         max_tokens=args.max_tokens,
+        temperature=args.temperature,
+    )
+    if args.db:
+        save_run(Path(args.db), run)
+        print(f"saved {run.id}", flush=True)
+
+    n_total = len(run.results)
+    n_pass = sum(
+        1 for r in run.results if r.checks and all(chk.ok for chk in r.checks) and not r.error
+    )
+    pct = (n_pass / n_total * 100) if n_total else 0.0
+    latencies = [r.total_ms for r in run.results if r.error is None]
+    p50_ms = statistics.median(latencies) if latencies else 0.0
+    print(f"pass {n_pass}/{n_total} ({pct:.0f}%) | p50: {p50_ms:.1f}ms", flush=True)
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
+    names = [part.strip() for part in args.suites.split(",") if part.strip()]
+    include_imported = bool(args.imported) and not args.no_imported
+    suites = load_named_suites(
+        args.suites_dir,
+        names,
+        include_imported=include_imported,
+        cap=args.cap,
+    )
+    total = sum(len(suite.cases) for suite in suites)
+    c = _client(args, client)
+    model_id = c.health()
+    versions = {suite.name: suite.version for suite in suites}
+
+    resume_run = None
+    if getattr(args, "resume", False):
+        resume_run = find_resumable_run(Path(args.db), model_id, versions)
+        if resume_run:
+            print(
+                f"resuming run {resume_run.id} ({len(resume_run.results)} cases loaded)",
+                flush=True,
+            )
+
+    def on_progress(event: str, index: int, _total: int, case_id: str, *rest: object) -> None:
+        if args.quiet:
+            return
+        if event == "start":
+            print(f"[{index}/{total}] start {case_id}", flush=True)
+            return
+        machine_ok = bool(rest[0]) if rest else False
+        result = rest[1] if len(rest) > 1 else None
+        status = "ok" if machine_ok else "fail"
+        ms = getattr(result, "total_ms", 0.0) if result is not None else 0.0
+        err = getattr(result, "error", None) if result is not None else None
+        extra = f" error={err}" if err else ""
+        print(f"[{index}/{total}] {status} {case_id} {ms:.0f}ms{extra}", flush=True)
+
+    run = run_many(
+        c,
+        suites,
+        case_timeout=args.timeout,
+        on_progress=None if args.quiet else on_progress,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        resume_run=resume_run,
+        db_path=Path(args.db),
     )
     save_run(Path(args.db), run)
+
+    n_total = len(run.results)
+    n_pass = sum(
+        1 for r in run.results if r.checks and all(chk.ok for chk in r.checks) and not r.error
+    )
+    pct = (n_pass / n_total * 100) if n_total else 0.0
+    latencies = [r.total_ms for r in run.results if r.error is None]
+    p50_ms = statistics.median(latencies) if latencies else 0.0
+    print(f"pass {n_pass}/{n_total} ({pct:.0f}%) | p50: {p50_ms:.1f}ms", flush=True)
     print(f"saved {run.id}", flush=True)
     return 0
 
@@ -188,10 +283,14 @@ def _cmd_list(args: argparse.Namespace, client: Client | None) -> int:
 
 
 def _machine_pass(run: Run) -> float:
-    checks = [c.ok for item in run.results for c in item.checks]
-    if not checks:
+    if not run.results:
         return 0.0
-    return sum(1 for ok in checks if ok) / len(checks)
+    passed_cases = sum(
+        1 for item in run.results
+        if not item.error and item.checks and all(c.ok for c in item.checks)
+    )
+    return passed_cases / len(run.results)
+
 
 
 def _judge_avg(run: Run) -> float | None:
