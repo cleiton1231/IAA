@@ -1,4 +1,4 @@
-version: 1
+version: 2
 suite: code
 cases:
   - id: code.reverse

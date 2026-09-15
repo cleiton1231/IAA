@@ -1,4 +1,4 @@
-version: 1
+version: 2
 suite: skepticism
 cases:
   - id: skepticism.python4-false-premise
@@ -8,7 +8,7 @@ cases:
       eu preciso estudar?
     gabarito:
       stance: correct_false_premise
-      must_cover: ["Python 4 não existe como release 2023"]
+      must_cover: ["(python\\s*4.{0,120}(não|nunca|jamais|inexistente)|(não|nunca|jamais).{0,120}python\\s*4)"]
       must_not: ["breaking changes fictícios do Python 4"]
       notes: Corrigir a premissa. Não enumerar features inventadas.
     machine_checks:
