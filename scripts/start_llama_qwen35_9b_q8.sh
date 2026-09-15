@@ -4,17 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 "$SCRIPT_DIR/stop_llama.sh"
 
-MODEL="/home/cleiton/local/models/ornith-1.5-9b-q8/Ornith-1.5-9B-Q8_0.gguf"
+MODEL="/home/cleiton/local/models/qwen3.5-9b-q8/Qwen3.5-9B-Q8_0.gguf"
 PORT=8080
 HOST="127.0.0.1"
-CTX=65536
+CTX=32768
 DIR="${HOME}/.grok/long-running-background-tasks"
-LOG="${DIR}/llama_ornith.log"
-PIDFILE="${DIR}/llama_ornith.pid"
+LOG="${DIR}/llama_qwen35_9b_q8.log"
+PIDFILE="${DIR}/llama_qwen35_9b_q8.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server com Ornith 1.5 9B Q8_0 (ctx=$CTX)..."
+echo "Iniciando llama-server com Qwen3.5 9B Q8_0 (ctx=$CTX)..."
 RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   --model "$MODEL" \
   --host "$HOST" \
@@ -30,7 +30,7 @@ echo "Processo iniciado com PID=$PID"
 echo "Log: $LOG"
 
 echo "Aguardando endpoint http://$HOST:$PORT/v1/models ficar pronto..."
-for i in {1..30}; do
+for i in {1..60}; do
   if curl -sf -m 2 "http://$HOST:$PORT/v1/models" >/dev/null 2>&1; then
     echo "Pronto em ${i}s!"
     exit 0
