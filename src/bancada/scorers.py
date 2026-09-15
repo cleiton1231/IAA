@@ -54,9 +54,22 @@ def _run_one(
     if check.type == "tool_name":
         return _tool_name(tool_calls, check.expected, reply)
     if check.type == "must_cover":
-        return _must_cover(reply, check.pattern or check.expected or "")
+        target = getattr(check, "target", None)
+        if target == "arguments":
+            text = _extract_tool_args(tool_calls, reply)
+        elif target == "reply":
+            text = reply or ""
+        else:
+            args = _extract_tool_args(tool_calls, reply)
+            text = f"{reply or ''} {args}".strip()
+        return _must_cover(text, check.pattern or check.expected or "")
     if check.type == "must_not":
-        return _must_not(reply, check.pattern or check.expected or "")
+        target = getattr(check, "target", None)
+        if target == "arguments":
+            text = _extract_tool_args(tool_calls, reply)
+        else:
+            text = reply or ""
+        return _must_not(text, check.pattern or check.expected or "")
     if check.type == "stance":
         return _stance(reply, check.expected or "", tool_calls)
     if check.type == "not_empty":
@@ -68,12 +81,19 @@ def _run_one(
 
 def _python_test(reply: str, source: str, setup: str | None = None) -> CheckResult:
     code = extract_code(reply)
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    fixtures_dir = os.path.join(repo_root, "tests", "fixtures")
+    sys_path_inject = (
+        f"import sys\n"
+        f"if {fixtures_dir!r} not in sys.path:\n"
+        f"    sys.path.insert(0, {fixtures_dir!r})\n"
+    )
     if setup and setup.strip() not in code:
         body = _body_after_setup(code)
         prefix = setup if setup.endswith("\n") else f"{setup}\n"
-        script = f"{prefix}{body}\n{source}\n"
+        script = f"{sys_path_inject}{prefix}{body}\n{source}\n"
     else:
-        script = f"{code}\n{source}\n"
+        script = f"{sys_path_inject}{code}\n{source}\n"
     env = {
         "PATH": os.environ.get("PATH", ""),
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -171,6 +191,23 @@ def _extract_tools_from_text(reply: str) -> list[str]:
     return names
 
 
+def _extract_tool_args(tool_calls: list[dict[str, Any]] | None, reply: str = "") -> str:
+    parts: list[str] = []
+    for call in tool_calls or []:
+        if isinstance(call, dict):
+            func = call.get("function")
+            if isinstance(func, dict) and "arguments" in func:
+                args = func["arguments"]
+                parts.append(args if isinstance(args, str) else str(args))
+            elif "arguments" in call:
+                args = call["arguments"]
+                parts.append(args if isinstance(args, str) else str(args))
+    if not parts and reply:
+        for m in re.finditer(r'"arguments"\s*:\s*(\{[^}]+\}|"[^"]+")', reply):
+            parts.append(m.group(1))
+    return " ".join(parts)
+
+
 def _match_pattern(text: str, pattern: str) -> bool:
     if not pattern:
         return False
@@ -201,7 +238,7 @@ def _stance(
 
     if exp == "correct_false_premise":
         correct_re = (
-            r"\b(não|falso|incorreto|errad[oa]|não existe|inexistente|"
+            r"\b(não|fals[oa]|incorret[oa]|errad[oa]|não existe|inexistente|"
             r"desment|confusão|nunca|fake|invenção)\b"
         )
         ok = bool(re.search(correct_re, rep, re.IGNORECASE))

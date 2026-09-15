@@ -31,6 +31,7 @@ class MachineCheck(BaseModel):
     expected: str | None = None
     pattern: str | None = None
     setup: str | None = None
+    target: str | None = None
 
 
 class Case(BaseModel):

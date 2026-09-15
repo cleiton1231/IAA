@@ -8,7 +8,6 @@ cases:
       Responda com um único bloco ```python contendo a função completa.
     gabarito:
       stance: accept_true_control
-      must_cover: ["inverter a string"]
       notes: Função pura, sem I/O.
     machine_checks:
       - type: python_test
@@ -116,3 +115,228 @@ cases:
           def ler_nota(path):
               return "# Ponteiros\ntexto"
           assert titulo_da_nota("x.md") == "# Ponteiros"
+  - id: code.bug-off-by-one
+    source: manual
+    prompt: |
+      A função `obter_intervalo(lista, inicio, fim)` deve retornar uma fatia com todos os elementos desde o índice `inicio` até o índice `fim`, inclusive.
+      Hoje ela possui um bug de off-by-one e exclui o elemento final:
+
+      def obter_intervalo(lista, inicio, fim):
+          return lista[inicio:fim]
+
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: range/slice exclusivo precisa ir até fim + 1.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert obter_intervalo([10, 20, 30, 40, 50], 1, 3) == [20, 30, 40]
+          assert obter_intervalo(["a", "b", "c"], 0, 0) == ["a"]
+  - id: code.bug-mutable-default
+    source: manual
+    prompt: |
+      A função `acumular_registro(item, registros=[])` possui o bug de valor padrão mutável, acumulando itens entre chamadas sucessivas.
+      Hoje ela está assim:
+
+      def acumular_registro(item, registros=[]):
+          registros.append(item)
+          return registros
+
+      Corrija a função para que cada chamada sem o argumento `registros` forneça uma lista nova e independente.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: Padrão mutável em argumento de função.
+    machine_checks:
+      - type: python_test
+        source: |
+          r1 = acumular_registro("primeiro")
+          r2 = acumular_registro("segundo")
+          assert r1 == ["primeiro"]
+          assert r2 == ["segundo"]
+  - id: code.bug-none-is
+    source: manual
+    prompt: |
+      A função `verificar_estado(obj)` deve retornar "vazio" quando `obj` é None, ou "preenchido" caso contrário.
+      Hoje ela usa igualdade de valor `obj == None`:
+
+      def verificar_estado(obj):
+          if obj == None:
+              return "vazio"
+          return "preenchido"
+
+      Essa comparação quebra quando `obj` implementa `__eq__` que lança exceção ou exige tipo específico.
+      Corrija a função utilizando a verificação por identidade (`is None`).
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: Usar is None para checagem segura de sentinela.
+    machine_checks:
+      - type: python_test
+        source: |
+          class ObjetoCustomizado:
+              def __eq__(self, other):
+                  raise RuntimeError("Operacao == proibida; use is")
+          assert verificar_estado(None) == "vazio"
+          assert verificar_estado(ObjetoCustomizado()) == "preenchido"
+  - id: code.bug-shadow
+    source: manual
+    prompt: |
+      A função `aplicar_taxa(taxa, precos)` deveria calcular o preço total aplicando a `taxa` fixa a todos os itens.
+      No entanto, a variável de controle do loop possui o mesmo nome do parâmetro `taxa`, sobrepondo o valor original:
+
+      def aplicar_taxa(taxa, precos):
+          total = 0.0
+          for taxa in precos:
+              total += taxa * (1.0 + taxa)
+          return total
+
+      Corrija a função renomeando a variável de iteração para que a taxa original seja aplicada a cada preço.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: Renomear variável de loop para evitar sombreamento de parâmetro.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert abs(aplicar_taxa(0.1, [100.0, 200.0]) - 330.0) < 1e-5
+          assert aplicar_taxa(0.0, [50.0]) == 50.0
+  - id: code.bug-fstring
+    source: manual
+    prompt: |
+      A função `formatar_log(nivel, codigo, mensagem)` deve retornar a string formatada no padrão `"[NIVEL] (CODIGO) - MENSAGEM"`.
+      Hoje ela falha com `TypeError` quando `codigo` é um número inteiro devido à concatenação ingênua de strings:
+
+      def formatar_log(nivel, codigo, mensagem):
+          return "[" + nivel + "] (" + codigo + ") - " + mensagem
+
+      Corrija a função usando f-string para suportar qualquer tipo em `codigo`.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: Interpolação via f-string evitando TypeError em inteiros.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert formatar_log("INFO", 200, "Sucesso") == "[INFO] (200) - Sucesso"
+          assert formatar_log("ERRO", 404, "Nao encontrado") == "[ERRO] (404) - Nao encontrado"
+  - id: code.bug-path-join
+    source: manual
+    prompt: |
+      A função `unir_caminho(diretorio, arquivo)` deve unir diretório e arquivo garantindo que o caminho resultante não contenha barras duplas (`//`) caso `diretorio` termine com barra (`/`).
+      Hoje ela está assim:
+
+      def unir_caminho(diretorio, arquivo):
+          return diretorio + "/" + arquivo
+
+      Corrija a função utilizando `os.path` ou `pathlib` para que o caminho retornado seja limpo e normalizado.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: os.path ou pathlib evitando barras duplas.
+    machine_checks:
+      - type: python_test
+        source: |
+          import os
+          c1 = unir_caminho("logs/", "app.log")
+          c2 = unir_caminho("logs", "app.log")
+          assert c1 == os.path.normpath("logs/app.log")
+          assert c2 == os.path.normpath("logs/app.log")
+          assert "//" not in c1
+  - id: code.bug-tz-naive
+    source: manual
+    prompt: |
+      A função `prazo_vencido(limite_utc)` recebe um objeto `datetime` com fuso horário UTC (offset-aware) e deve retornar `True` se o momento atual já ultrapassou esse prazo.
+      A implementação atual usa `datetime.now()` sem timezone (offset-naive), gerando erro de comparação:
+
+      from datetime import datetime
+
+      def prazo_vencido(limite_utc):
+          agora = datetime.now()
+          return agora > limite_utc
+
+      Corrija a função para obter o horário atual com `timezone.utc` (ou compatível com `limite_utc`), permitindo a comparação correta.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: datetime com timezone UTC evitando comparação naive vs aware.
+    machine_checks:
+      - type: python_test
+        source: |
+          from datetime import datetime, timezone, timedelta
+          passado = datetime.now(timezone.utc) - timedelta(hours=1)
+          futuro = datetime.now(timezone.utc) + timedelta(hours=1)
+          assert prazo_vencido(passado) is True
+          assert prazo_vencido(futuro) is False
+  - id: code.bug-sort-dict
+    source: manual
+    prompt: |
+      A função `ordenar_por_idade(registros)` recebe uma lista de dicionários onde cada elemento possui as chaves `"nome"` e `"idade"`. Ela deve retornar uma nova lista ordenada pela `"idade"` de forma crescente.
+      A implementação atual tenta chamar `sorted` diretamente nos dicionários sem especificar uma função chave:
+
+      def ordenar_por_idade(registros):
+          return sorted(registros)
+
+      Isso falha com `TypeError: '<' not supported between instances of 'dict' and 'dict'`.
+      Corrija a função definindo o parâmetro `key` para ordenar corretamente pelo campo `"idade"`.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: "Ordenar dicionários especificando key=lambda x: x['idade']."
+    machine_checks:
+      - type: python_test
+        source: |
+          dados = [{"nome": "Beto", "idade": 30}, {"nome": "Ana", "idade": 18}, {"nome": "Carlos", "idade": 25}]
+          resultado = ordenar_por_idade(dados)
+          assert [d["idade"] for d in resultado] == [18, 25, 30]
+          assert [d["nome"] for d in resultado] == ["Ana", "Carlos", "Beto"]
+  - id: code.bug-re-greedy
+    source: manual
+    prompt: |
+      A função `extrair_tag_nomeada(texto)` deve encontrar a PRIMEIRA ocorrência do padrão `<tag>conteudo</tag>` e retornar apenas o conteúdo interno através de um grupo nomeado regex chamado `valor` (`(?P<valor>...)`).
+      A implementação atual usa uma regex gulosa que engole além da primeira tag de fechamento e não utiliza o grupo nomeado:
+
+      import re
+
+      def extrair_tag_nomeada(texto):
+          match = re.search(r"<tag>(.*)</tag>", texto)
+          if match:
+              return match.group(1)
+          return None
+
+      Corrija a função tornando a captura não-gulosa e utilizando o grupo nomeado `valor` para retornar `match.group("valor")`.
+      Responda com um único bloco ```python contendo a função corrigida.
+    gabarito:
+      stance: accept_true_control
+      notes: Regex não-gulosa com grupo nomeado valor.
+    machine_checks:
+      - type: python_test
+        source: |
+          texto = "Inicio <tag>primeira</tag> meio <tag>segunda</tag> fim"
+          assert extrair_tag_nomeada(texto) == "primeira"
+          assert extrair_tag_nomeada("sem tags") is None
+  - id: code.bug-twomodule
+    source: manual
+    prompt: |
+      No pacote `code_twomodule` temos o módulo utilitário `code_twomodule.util`:
+      ```python
+      def formatar_moeda(valor: float) -> str:
+          return f"R$ {valor:.2f}"
+      ```
+      E temos o módulo `code_twomodule.caller` que contém um bug no import:
+      ```python
+      from code_twomodule.util import formata_moeda
+
+      def gerar_recibo(item: str, preco: float) -> str:
+          return f"Item: {item} - Total: {formata_moeda(preco)}"
+      ```
+      Corrija o arquivo `caller.py` para importar o nome correto `formatar_moeda` e invocar a função devidamente.
+      Responda com um único bloco ```python contendo o módulo `caller.py` completo.
+    gabarito:
+      stance: accept_true_control
+      notes: Correção de importação entre módulos util e caller.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert gerar_recibo("Teclado", 150.0) == "Item: Teclado - Total: R$ 150.00"
