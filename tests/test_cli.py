@@ -243,11 +243,44 @@ def test_smoke_fails_if_health_fails(tmp_path: Path, capsys) -> None:
 def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
     suites = tmp_path / "suites"
     suites.mkdir()
-    (suites / "skepticism.yaml").write_text(SUITE, encoding="utf-8")
+    suite_two_cases = (
+        SUITE
+        + """  - id: skepticism.python4-another
+    source: manual
+    prompt: Python 4 data?
+    gabarito:
+      stance: correct_false_premise
+    machine_checks:
+      - type: not_empty
+"""
+    )
+    (suites / "skepticism.yaml").write_text(suite_two_cases, encoding="utf-8")
     db = tmp_path / "bancada.sqlite"
     client = _client()
 
-    # First run
+    from bancada.models import CaseResult, CheckOutcome, Gabarito, Run, Stance
+    from bancada.store import save_run
+
+    incomplete = Run(
+        id="run-incomplete",
+        model_id="toy-model",
+        endpoint="http://127.0.0.1:8080/v1",
+        suite_versions={"skepticism": 1},
+        results=[
+            CaseResult(
+                case_id="skepticism.python4-false-premise",
+                suite="skepticism",
+                source="manual",
+                prompt="prompt",
+                reply="cached",
+                checks=[CheckOutcome(type="not_empty", ok=True)],
+                gabarito=Gabarito(stance=Stance.CORRECT_FALSE_PREMISE),
+            )
+        ],
+    )
+    save_run(db, incomplete)
+
+    # Run with --resume: resumes the incomplete run
     code = main(
         [
             "run",
@@ -258,16 +291,18 @@ def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
             "--db",
             str(db),
             "--no-imported",
+            "--resume",
         ],
         client=client,
     )
     assert code == 0
-    out1 = capsys.readouterr().out
-    assert "pass 1/1" in out1
-    assert "p50:" in out1
-    assert "saved " in out1
+    out = capsys.readouterr().out
+    assert "resuming run run-incomplete" in out
+    assert "pass 2/2" in out
+    assert "p50:" in out
+    assert "saved run-incomplete" in out
 
-    # Second run with --resume
+    # Second run with --resume: now that run is complete, --resume is a no-op
     code2 = main(
         [
             "run",
@@ -284,6 +319,4 @@ def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
     )
     assert code2 == 0
     out2 = capsys.readouterr().out
-    assert "resuming run " in out2
-    assert "pass 1/1" in out2
-    assert "saved " in out2
+    assert "resuming run" not in out2

@@ -143,3 +143,16 @@ cases:
     )
     with pytest.raises(ValueError, match="stance"):
         load_suite(path)
+
+
+def test_all_repo_suites_yaml_valid_and_have_category() -> None:
+    suites_dir = Path(__file__).resolve().parent.parent / "suites"
+    yaml_files = list(suites_dir.glob("*.yaml"))
+    assert len(yaml_files) >= 4
+
+    valid_categories = {"codigo", "agentico", "ceticismo", "humanas"}
+    for yf in yaml_files:
+        suite = load_suite(yf)
+        assert suite.category in valid_categories
+        for case in suite.cases:
+            assert case.category in valid_categories

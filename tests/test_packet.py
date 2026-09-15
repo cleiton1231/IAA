@@ -104,7 +104,41 @@ def test_packet_categorization_and_summary_table() -> None:
     assert "| codigo | 1 | 1/1 (100%) | 50.0 |" in text
     assert "| agentico | 1 | 1/1 (100%) | 100.0 |" in text
     assert "| **total** | 2 | 2/2 (100%) |" in text
-    assert "## Categoria: codigo" in text
-    assert "## Categoria: agentico" in text
+    assert "## codigo" in text
+    assert "## agentico" in text
+    assert "## JSON do juiz" in text
     assert "### code.rev" in text
     assert "### tools.cron" in text
+
+
+def test_packet_all_four_categories() -> None:
+    cats = ["codigo", "agentico", "ceticismo", "humanas"]
+    results = [
+        CaseResult(
+            case_id=f"{cat}.sample",
+            suite=cat,
+            category=cat,
+            source="manual",
+            prompt="teste",
+            reply="ok",
+            checks=[CheckOutcome(type="not_empty", ok=True)],
+            total_ms=20.0,
+            gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+        )
+        for cat in cats
+    ]
+    run = Run(
+        id="run-4cats",
+        model_id="toy-model",
+        endpoint="http://127.0.0.1:8080/v1",
+        suite_versions={cat: 1 for cat in cats},
+        results=results,
+    )
+    text = render_packet(run)
+    assert "# Bancada packet run-4cats" in text
+    assert "## Resumo máquina" in text
+    assert "## codigo" in text
+    assert "## agentico" in text
+    assert "## ceticismo" in text
+    assert "## humanas" in text
+    assert "## JSON do juiz" in text

@@ -24,7 +24,7 @@ def render_packet(run: Run) -> str:
     p50 = _percentile(latencies, 50)
     p95 = _percentile(latencies, 95)
     lines = [
-        "# Bancada judge packet",
+        f"# Bancada packet {run.id}",
         "",
         f"- run_id: `{run.id}`",
         f"- model: `{run.model_id}`",
@@ -97,7 +97,7 @@ def render_packet(run: Run) -> str:
             continue
         lines.extend(
             [
-                f"## Categoria: {cat}",
+                f"## {cat}",
                 "",
             ]
         )
@@ -114,7 +114,7 @@ def render_packet(run: Run) -> str:
     }
     lines.extend(
         [
-            "## Template JSON para o juiz",
+            "## JSON do juiz",
             "",
             "```json",
             json.dumps(template, ensure_ascii=False, indent=2),

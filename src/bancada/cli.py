@@ -182,7 +182,13 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
 
     resume_run = None
     if getattr(args, "resume", False):
-        resume_run = find_resumable_run(Path(args.db), model_id, versions)
+        all_case_ids = [case.id for suite in suites for case in suite.cases]
+        resume_run = find_resumable_run(
+            Path(args.db),
+            model_id,
+            versions,
+            expected_case_ids=all_case_ids,
+        )
         if resume_run:
             print(
                 f"resuming run {resume_run.id} ({len(resume_run.results)} cases loaded)",

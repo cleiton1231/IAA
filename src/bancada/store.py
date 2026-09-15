@@ -122,11 +122,16 @@ def find_resumable_run(
     model_id: str,
     suite_versions: dict[str, int],
     run_id: str | None = None,
+    expected_case_ids: list[str] | set[str] | None = None,
 ) -> Run | None:
     if run_id:
         cand = load_run(path, run_id)
         if cand and cand.model_id == model_id:
             if all(cand.suite_versions.get(k) == v for k, v in suite_versions.items()):
+                if expected_case_ids:
+                    done = {r.case_id for r in cand.results if not r.error}
+                    if set(expected_case_ids).issubset(done):
+                        return None
                 return cand
         return None
 
@@ -143,7 +148,13 @@ def find_resumable_run(
             except Exception:
                 continue
             if all(v_dict.get(k) == v for k, v in suite_versions.items()):
-                return load_run(path, cand_id)
+                cand = load_run(path, cand_id)
+                if cand:
+                    if expected_case_ids:
+                        done = {r.case_id for r in cand.results if not r.error}
+                        if set(expected_case_ids).issubset(done):
+                            continue
+                    return cand
         return None
     finally:
         conn.close()
