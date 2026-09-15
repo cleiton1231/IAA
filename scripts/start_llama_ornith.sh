@@ -22,6 +22,9 @@ RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   -ngl 99 \
   --ctx-size "$CTX" \
   --jinja \
+  -fa on \
+  -ctk q8_0 \
+  -ctv q8_0 \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!

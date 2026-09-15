@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Bancada: thinking OFF. Para DocMind/uso com think, tire o kwargs.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,6 +23,10 @@ RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   -ngl 99 \
   --ctx-size "$CTX" \
   --jinja \
+  --chat-template-kwargs '{"enable_thinking": false}' \
+  -fa on \
+  -ctk q8_0 \
+  -ctv q8_0 \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!
