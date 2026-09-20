@@ -7,6 +7,8 @@ cd "$ROOT"
 SUITES="${1:-skepticism,code,obsidian,tools}"
 ENDPOINT="${BANCADA_ENDPOINT:-http://127.0.0.1:8080/v1}"
 DB="${BANCADA_DB:-data/bancada.sqlite}"
+TEMP="${BANCADA_TEMP:-0}"
+SEED="${BANCADA_SEED:-42}"
 DIR="${HOME}/.grok/long-running-background-tasks"
 mkdir -p "$DIR" reports data
 LOG="$DIR/bancada_practical_$$.log"
@@ -25,15 +27,27 @@ if [[ -f "$PIDFILE" ]]; then
   fi
 fi
 
-echo "starting run suites=$SUITES log=$LOG"
+IMPORTED_FLAG=(--no-imported)
+# Default: HumanEval imported only when suite list includes code (cap from YAML/manifest).
+if [[ "${BANCADA_IMPORTED:-}" == "1" ]]; then
+  IMPORTED_FLAG=(--imported)
+elif [[ "${BANCADA_IMPORTED:-}" == "0" ]]; then
+  IMPORTED_FLAG=(--no-imported)
+elif [[ "$SUITES" == *code* ]]; then
+  IMPORTED_FLAG=(--imported --cap "${BANCADA_CAP:-12}")
+fi
+
+echo "starting run suites=$SUITES temp=$TEMP seed=$SEED imported_flag=${IMPORTED_FLAG[*]} log=$LOG"
 # nohup so the tool wrapper timeout cannot kill the bench
 nohup python -m bancada.cli run \
   --endpoint "$ENDPOINT" \
   --suites "$SUITES" \
-  --no-imported \
+  "${IMPORTED_FLAG[@]}" \
   --db "$DB" \
   --timeout "${BANCADA_TIMEOUT:-90}" \
-  --max-tokens "${BANCADA_MAX_TOKENS:-1024}" \
+  --max-tokens "${BANCADA_MAX_TOKENS:-512}" \
+  --temperature "$TEMP" \
+  --seed "$SEED" \
   >"$LOG" 2>&1 &
 echo $! >"$PIDFILE"
 PID="$(cat "$PIDFILE")"

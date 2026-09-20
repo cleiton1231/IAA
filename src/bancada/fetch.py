@@ -53,6 +53,7 @@ def fetch_manifest(
     raw_dir: Path | str,
     suites_dir: Path | str,
     downloader=default_downloader,
+    only: set[str] | None = None,
 ) -> list[Path]:
     manifest_path = Path(manifest_path)
     raw_dir = Path(raw_dir)
@@ -68,8 +69,14 @@ def fetch_manifest(
     total = 0
     by_suite: dict[str, list[Case]] = {}
     for source in sources:
+        source_id = str(source.get("id") or "")
+        if only is not None:
+            if source_id not in only:
+                continue
+        elif source.get("enabled") is False:
+            continue
         url = source["url"]
-        dest = raw_dir / _filename(source["id"], url)
+        dest = raw_dir / _filename(source_id, url)
         downloader(url, dest)
         size = dest.stat().st_size
         total += size
@@ -80,7 +87,7 @@ def fetch_manifest(
         actual = sha256_file(dest)
         if expected.lower() != actual.lower():
             raise FetchError(
-                f"sha256 mismatch for {source['id']}: expected {expected} got {actual}"
+                f"sha256 mismatch for {source_id}: expected {expected} got {actual}"
             )
         adapter = ADAPTERS[source["adapter"]]
         cases = adapter(dest)

@@ -100,7 +100,7 @@ def test_packet_categorization_and_summary_table() -> None:
     )
     text = render_packet(run)
     assert "## Resumo máquina" in text
-    assert "| Categoria | n | machine_pass | p50_ms |" in text
+    assert "| Categoria | n | machine_pass | p50_ms | p50_tok/s |" in text
     assert "| codigo | 1 | 1/1 (100%) | 50.0 |" in text
     assert "| agentico | 1 | 1/1 (100%) | 100.0 |" in text
     assert "| **total** | 2 | 2/2 (100%) |" in text
@@ -109,6 +109,49 @@ def test_packet_categorization_and_summary_table() -> None:
     assert "## JSON do juiz" in text
     assert "### code.rev" in text
     assert "### tools.cron" in text
+
+
+def test_compact_packet_auto_scores_python_test() -> None:
+    from bancada.packet import auto_score_run, render_packet_compact
+
+    run = Run(
+        id="run-auto",
+        model_id="toy",
+        endpoint="http://127.0.0.1:8080/v1",
+        suite_versions={"code": 3},
+        results=[
+            CaseResult(
+                case_id="code.reverse",
+                suite="code",
+                category="codigo",
+                source="manual",
+                prompt="rev",
+                reply="ok",
+                checks=[CheckOutcome(type="python_test", ok=True)],
+                total_ms=10.0,
+                tokens_per_second=30.0,
+                gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+            ),
+            CaseResult(
+                case_id="skepticism.x",
+                suite="skepticism",
+                category="ceticismo",
+                source="manual",
+                prompt="q",
+                reply="resposta longa o bastante",
+                checks=[CheckOutcome(type="not_empty", ok=True)],
+                total_ms=20.0,
+                gabarito=Gabarito(stance=Stance.CORRECT_FALSE_PREMISE),
+            ),
+        ],
+    )
+    auto = auto_score_run(run)
+    assert any(c["id"] == "code.reverse" and c["score"] == 3 for c in auto["auto"])
+    assert "skepticism.x" in auto["needs_judge"]
+    text = render_packet_compact(run)
+    assert "Auto-score" in text
+    assert "code.reverse" in text
+    assert "needs_judge" in text or "skepticism.x" in text
 
 
 def test_packet_all_four_categories() -> None:

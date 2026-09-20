@@ -9,6 +9,8 @@ MODEL="/home/cleiton/local/models/ternary-bonsai-2-27b-pq2/Ternary-Bonsai-2-27B-
 BIN="/home/cleiton/local/prism-llama.cpp/build/bin/llama-server"
 PORT=8080
 HOST="127.0.0.1"
+TEMP="${BANCADA_TEMP:-0}"
+SEED="${BANCADA_SEED:-42}"
 CTX=16384
 DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_ternary_bonsai_27b.log"
@@ -16,7 +18,7 @@ PIDFILE="${DIR}/llama_ternary_bonsai_27b.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server (fork PrismML, CPU) com Ternary-Bonsai-2-27B PQ2_0 (ctx=$CTX)..."
+echo "Iniciando llama-server (fork PrismML, CPU) com Ternary-Bonsai-2-27B PQ2_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
 setsid "$BIN" \
   --model "$MODEL" \
   --host "$HOST" \
@@ -24,6 +26,8 @@ setsid "$BIN" \
   --ctx-size "$CTX" \
   --jinja \
   --threads 12 \
+  --temp "$TEMP" \
+  --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!

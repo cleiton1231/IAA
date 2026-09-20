@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS runs (
     max_tokens INTEGER,
     timeout REAL,
     temperature REAL,
+    seed INTEGER,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE TABLE IF NOT EXISTS case_results (
@@ -45,6 +46,7 @@ def _connect(path: Path) -> sqlite3.Connection:
         ("max_tokens", "INTEGER"),
         ("timeout", "REAL"),
         ("temperature", "REAL"),
+        ("seed", "INTEGER"),
     ]:
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {col_type}")
@@ -57,8 +59,8 @@ def save_run(path: Path | str, run: Run) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO runs
-            (id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature)
-            VALUES (?,?,?,?,?,?,?)
+            (id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed)
+            VALUES (?,?,?,?,?,?,?,?)
             """,
             (
                 run.id,
@@ -68,6 +70,7 @@ def save_run(path: Path | str, run: Run) -> None:
                 run.max_tokens,
                 run.timeout,
                 run.temperature,
+                run.seed,
             ),
         )
         conn.execute("DELETE FROM case_results WHERE run_id = ?", (run.id,))
@@ -86,7 +89,7 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
     try:
         row = conn.execute(
             """
-            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature
+            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed
             FROM runs WHERE id = ?
             """,
             (run_id,),
@@ -109,6 +112,7 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
             max_tokens=row[4],
             timeout=row[5],
             temperature=row[6],
+            seed=row[7],
             results=[json.loads(item[0]) for item in payloads],
             judge_scores=json.loads(score_row[0]) if score_row else None,
         )
@@ -176,15 +180,31 @@ def list_runs(path: Path | str) -> list[Run]:
         conn.close()
 
 
+def merge_scores(payload: dict[str, Any]) -> dict[str, Any]:
+    """Merge auto + judge cases into a single cases list (judge overrides auto by id)."""
+    by_id: dict[str, dict[str, Any]] = {}
+    for item in payload.get("auto") or []:
+        if isinstance(item, dict) and item.get("id"):
+            by_id[str(item["id"])] = dict(item)
+    for item in payload.get("cases") or []:
+        if isinstance(item, dict) and item.get("id"):
+            by_id[str(item["id"])] = dict(item)
+    merged = dict(payload)
+    if by_id:
+        merged["cases"] = list(by_id.values())
+    return merged
+
+
 def save_scores(path: Path | str, run_id: str, scores: dict[str, Any]) -> None:
     conn = _connect(Path(path))
     try:
         exists = conn.execute("SELECT 1 FROM runs WHERE id = ?", (run_id,)).fetchone()
         if exists is None:
             raise ValueError(f"unknown run {run_id}")
+        merged = merge_scores(scores)
         conn.execute(
             "INSERT OR REPLACE INTO judge_scores (run_id, payload) VALUES (?,?)",
-            (run_id, json.dumps(scores)),
+            (run_id, json.dumps(merged)),
         )
         conn.commit()
     finally:

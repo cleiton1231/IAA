@@ -64,6 +64,56 @@ def test_chat_sends_model_and_max_tokens() -> None:
     assert seen["max_tokens"] == 256
 
 
+def test_chat_sends_temperature_and_seed() -> None:
+    import json
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "toy"}]})
+        seen.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+        )
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
+    client.chat(
+        [{"role": "user", "content": "oi"}],
+        temperature=0.0,
+        seed=42,
+    )
+    assert seen["temperature"] == 0.0
+    assert seen["seed"] == 42
+
+
+def test_chat_parses_llama_timings_and_usage() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "toy"}]})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 34},
+                "timings": {
+                    "prompt_ms": 45.5,
+                    "predicted_per_second": 28.3,
+                    "prompt_per_second": 120.0,
+                },
+            },
+        )
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
+    result = client.chat([{"role": "user", "content": "oi"}])
+    assert result.prompt_tokens == 12
+    assert result.completion_tokens == 34
+    assert result.ttft_ms == 45.5
+    assert result.tokens_per_second == 28.3
+    assert result.prompt_per_second == 120.0
+
+
 def test_health_raises_on_connection_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused", request=request)

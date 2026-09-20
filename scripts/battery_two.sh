@@ -42,7 +42,8 @@ for id in ornith qwen35-9b-q8; do
   fi
 
   echo "--- smoke $id ---"
-  if ! python -m bancada.cli smoke --endpoint http://127.0.0.1:8080/v1 --suites "$SUITES"; then
+  if ! python -m bancada.cli smoke --endpoint http://127.0.0.1:8080/v1 --suites "$SUITES" \
+      --temperature "${BANCADA_TEMP:-0}" --seed "${BANCADA_SEED:-42}"; then
     echo "FALHA: smoke $id — não sigo para o run longo"
     FAILED_MODELS+=("$id")
     continue

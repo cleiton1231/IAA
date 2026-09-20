@@ -25,6 +25,42 @@ class ChatResult:
     text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    ttft_ms: float | None = None
+    tokens_per_second: float | None = None
+    prompt_per_second: float | None = None
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_chat_metrics(payload: dict[str, Any]) -> dict[str, float | int | None]:
+    """Extract usage + llama-server timings from a chat completion body."""
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+    timings = payload.get("timings") if isinstance(payload.get("timings"), dict) else {}
+    return {
+        "prompt_tokens": _as_int(usage.get("prompt_tokens")),
+        "completion_tokens": _as_int(usage.get("completion_tokens")),
+        "ttft_ms": _as_float(timings.get("prompt_ms")),
+        "tokens_per_second": _as_float(timings.get("predicted_per_second")),
+        "prompt_per_second": _as_float(timings.get("prompt_per_second")),
+    }
 
 
 class Client:
@@ -82,6 +118,7 @@ class Client:
         model: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        seed: int | None = None,
     ) -> ChatResult:
         url = f"{self.endpoint}/chat/completions"
         body: dict[str, Any] = {"messages": messages}
@@ -93,6 +130,8 @@ class Client:
             body["max_tokens"] = max_tokens
         if temperature is not None:
             body["temperature"] = temperature
+        if seed is not None:
+            body["seed"] = seed
         request_timeout = timeout if timeout is not None else self.timeout
         try:
             response = self._http.post(url, json=body, timeout=request_timeout)
@@ -122,4 +161,14 @@ class Client:
         tool_calls = message.get("tool_calls") or []
         if not isinstance(tool_calls, list):
             tool_calls = []
-        return ChatResult(text=str(text), tool_calls=tool_calls, raw=payload)
+        metrics = parse_chat_metrics(payload)
+        return ChatResult(
+            text=str(text),
+            tool_calls=tool_calls,
+            raw=payload,
+            prompt_tokens=metrics["prompt_tokens"],  # type: ignore[arg-type]
+            completion_tokens=metrics["completion_tokens"],  # type: ignore[arg-type]
+            ttft_ms=metrics["ttft_ms"],  # type: ignore[arg-type]
+            tokens_per_second=metrics["tokens_per_second"],  # type: ignore[arg-type]
+            prompt_per_second=metrics["prompt_per_second"],  # type: ignore[arg-type]
+        )

@@ -5,7 +5,7 @@ import csv
 from pathlib import Path
 
 from bancada.adapters.jsonl import read_jsonl
-from bancada.models import Case, Gabarito, Stance
+from bancada.models import Case, Difficulty, Gabarito, Stance
 
 
 def adapt_falseqa(path: Path | str) -> list[Case]:
@@ -34,6 +34,8 @@ def adapt_falseqa(path: Path | str) -> list[Case]:
                     must_cover=([explanation] if explanation else []) + answers[:2],
                     notes=notes,
                 ),
+                difficulty=Difficulty.MEDIO,
+                max_tokens=256,
             )
         )
     return cases

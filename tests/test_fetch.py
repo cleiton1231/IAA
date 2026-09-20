@@ -132,3 +132,94 @@ def test_sha256_file_matches_hashlib(tmp_path: Path) -> None:
     path = tmp_path / "f.bin"
     path.write_bytes(b"abc")
     assert sha256_file(path) == hashlib.sha256(b"abc").hexdigest()
+
+
+def test_fetch_skips_disabled_sources(tmp_path: Path) -> None:
+    src = FIXTURES / "humaneval.jsonl"
+    bfcl = FIXTURES / "bfcl_simple.json"
+    if not bfcl.exists():
+        bfcl = src  # fallback: still must not download disabled
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "max_bytes": 52428800,
+                "seed": "bancada-v1",
+                "sources": [
+                    {
+                        "id": "humaneval",
+                        "suite": "code",
+                        "adapter": "humaneval",
+                        "enabled": True,
+                        "url": "https://example.invalid/humaneval.jsonl",
+                        "sha256": _hash(src),
+                        "cap": 2,
+                    },
+                    {
+                        "id": "bfcl_simple",
+                        "suite": "tools",
+                        "adapter": "bfcl",
+                        "enabled": False,
+                        "url": "https://example.invalid/bfcl.json",
+                        "sha256": "0" * 64,
+                        "cap": 2,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen: list[str] = []
+
+    def downloader(url: str, dest: Path) -> None:
+        seen.append(url)
+        dest.write_bytes(src.read_bytes())
+
+    written = fetch_manifest(
+        manifest,
+        raw_dir=tmp_path / "raw",
+        suites_dir=tmp_path / "suites",
+        downloader=downloader,
+    )
+    assert len(seen) == 1
+    assert "humaneval" in seen[0]
+    assert any(p.name == "code.yaml" for p in written)
+    assert not (tmp_path / "suites" / "imported" / "tools.yaml").exists()
+
+
+def test_fetch_only_overrides_enabled(tmp_path: Path) -> None:
+    src = FIXTURES / "humaneval.jsonl"
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "max_bytes": 52428800,
+                "seed": "bancada-v1",
+                "sources": [
+                    {
+                        "id": "humaneval",
+                        "suite": "code",
+                        "adapter": "humaneval",
+                        "enabled": False,
+                        "url": "https://example.invalid/humaneval.jsonl",
+                        "sha256": _hash(src),
+                        "cap": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def downloader(url: str, dest: Path) -> None:
+        dest.write_bytes(src.read_bytes())
+
+    written = fetch_manifest(
+        manifest,
+        raw_dir=tmp_path / "raw",
+        suites_dir=tmp_path / "suites",
+        downloader=downloader,
+        only={"humaneval"},
+    )
+    assert written
+    assert (tmp_path / "suites" / "imported" / "code.yaml").exists()

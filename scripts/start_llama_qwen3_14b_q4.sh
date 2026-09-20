@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL="/home/cleiton/local/models/qwen3-14b-q4/Qwen3-14B-Q4_K_M.gguf"
 PORT=8080
 HOST="127.0.0.1"
+TEMP="${BANCADA_TEMP:-0}"
+SEED="${BANCADA_SEED:-42}"
 CTX=32768
 DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_qwen3_14b_q4.log"
@@ -15,7 +17,7 @@ PIDFILE="${DIR}/llama_qwen3_14b_q4.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server com Qwen3 14B Q4_K_M (ctx=$CTX)..."
+echo "Iniciando llama-server com Qwen3 14B Q4_K_M (ctx=$CTX temp=$TEMP seed=$SEED)..."
 RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   --model "$MODEL" \
   --host "$HOST" \
@@ -27,6 +29,8 @@ RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   -fa on \
   -ctk q8_0 \
   -ctv q8_0 \
+  --temp "$TEMP" \
+  --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!

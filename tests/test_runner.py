@@ -11,6 +11,7 @@ from bancada.models import (
     Case,
     CaseResult,
     CheckOutcome,
+    Difficulty,
     Gabarito,
     MachineCheck,
     Run,
@@ -29,6 +30,7 @@ def _suite() -> Suite:
                 id="code.reverse",
                 suite="code",
                 source="manual",
+                difficulty=Difficulty.MEDIO,
                 prompt="escreva reverse",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
                 machine_checks=[
@@ -94,6 +96,41 @@ def test_runner_records_reply_checks_and_latency() -> None:
     assert run.results[0].error is None
 
 
+def test_runner_copies_timings_and_seed() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "toy-model"}]})
+        seen.update(json.loads(request.content))
+        code = "```python\ndef reverse(s):\n    return s[::-1]\n```"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": code}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                "timings": {
+                    "prompt_ms": 33.0,
+                    "predicted_per_second": 40.0,
+                    "prompt_per_second": 200.0,
+                },
+            },
+        )
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
+    run = run_suite(client, _suite(), temperature=0.0, seed=42)
+    assert run.temperature == 0.0
+    assert run.seed == 42
+    assert seen["temperature"] == 0.0
+    assert seen["seed"] == 42
+    result = run.results[0]
+    assert result.ttft_ms == 33.0
+    assert result.tokens_per_second == 40.0
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 20
+    assert result.fail_class == "ok"
+
+
 def test_runner_refuses_to_start_without_health() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, json={})
@@ -111,12 +148,14 @@ def test_runner_marks_network_error_and_continues() -> None:
             Case(
                 id="code.one",
                 suite="code",
+                difficulty=Difficulty.MEDIO,
                 prompt="a",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
             ),
             Case(
                 id="code.two",
                 suite="code",
+                difficulty=Difficulty.MEDIO,
                 prompt="b",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
                 machine_checks=[MachineCheck(type="not_empty")],
@@ -170,6 +209,7 @@ def test_runner_captures_tool_calls() -> None:
     case = Case(
         id="tools.cron",
         suite="tools",
+                difficulty=Difficulty.MEDIO,
         prompt="lembrete",
         tools=[{"type": "function", "function": {"name": "cron"}}],
         gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
@@ -209,6 +249,7 @@ def test_empty_checks_does_not_pass() -> None:
             Case(
                 id="dummy.empty-checks",
                 suite="dummy",
+                difficulty=Difficulty.MEDIO,
                 prompt="teste",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
                 machine_checks=[],
@@ -277,6 +318,7 @@ def test_multiturn_runner_native_tool_call() -> None:
     case = Case(
         id="tools.multiturn-test",
         suite="tools",
+                difficulty=Difficulty.MEDIO,
         category="agentico",
         prompt="Liste /tmp com exec",
         fake_tool_response="cache_01.tmp\nimportant_data.db\nold_log.tmp",
@@ -333,6 +375,7 @@ def test_runner_resume_skips_already_executed_cases() -> None:
             Case(
                 id="case-1",
                 suite="test_suite",
+                difficulty=Difficulty.MEDIO,
                 prompt="prompt 1",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
                 machine_checks=[MachineCheck(type="not_empty")],
@@ -340,6 +383,7 @@ def test_runner_resume_skips_already_executed_cases() -> None:
             Case(
                 id="case-2",
                 suite="test_suite",
+                difficulty=Difficulty.MEDIO,
                 prompt="prompt 2",
                 gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
                 machine_checks=[MachineCheck(type="not_empty")],

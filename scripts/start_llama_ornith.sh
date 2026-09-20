@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL="/home/cleiton/local/models/ornith-1.5-9b-q8/Ornith-1.5-9B-Q8_0.gguf"
 PORT=8080
 HOST="127.0.0.1"
+TEMP="${BANCADA_TEMP:-0}"
+SEED="${BANCADA_SEED:-42}"
 CTX=65536
 DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_ornith.log"
@@ -14,7 +16,7 @@ PIDFILE="${DIR}/llama_ornith.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server com Ornith 1.5 9B Q8_0 (ctx=$CTX)..."
+echo "Iniciando llama-server com Ornith 1.5 9B Q8_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
 RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   --model "$MODEL" \
   --host "$HOST" \
@@ -25,6 +27,8 @@ RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   -fa on \
   -ctk q8_0 \
   -ctv q8_0 \
+  --temp "$TEMP" \
+  --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!

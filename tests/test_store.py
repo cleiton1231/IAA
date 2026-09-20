@@ -33,6 +33,7 @@ def test_save_and_load_run(tmp_path: Path) -> None:
     run.max_tokens = 512
     run.timeout = 45.0
     run.temperature = 0.7
+    run.seed = 42
     save_run(db, run)
     loaded = load_run(db, "abc123")
     assert loaded is not None
@@ -40,6 +41,7 @@ def test_save_and_load_run(tmp_path: Path) -> None:
     assert loaded.max_tokens == 512
     assert loaded.timeout == 45.0
     assert loaded.temperature == 0.7
+    assert loaded.seed == 42
     assert loaded.results[0].case_id == "code.reverse"
     assert loaded.results[0].checks[0].ok is True
     assert loaded.results[0].gabarito.stance == Stance.ACCEPT_TRUE_CONTROL

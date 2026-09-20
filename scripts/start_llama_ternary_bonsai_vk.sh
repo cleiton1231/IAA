@@ -10,6 +10,8 @@ MODEL="/home/cleiton/local/models/ternary-bonsai-2-27b-ptq1/Ternary-Bonsai-2-27B
 BIN="/home/cleiton/local/prism-bin/llama-prism-b10685-7dffb15/llama-server"
 PORT=8080
 HOST="127.0.0.1"
+TEMP="${BANCADA_TEMP:-0}"
+SEED="${BANCADA_SEED:-42}"
 CTX=8192
 DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_ternary_bonsai_ptq1.log"
@@ -17,7 +19,7 @@ PIDFILE="${DIR}/llama_ternary_bonsai_ptq1.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server (fork PrismML b10685, Vulkan) com Bonsai-2-27B PQ2_0 (ctx=$CTX)..."
+echo "Iniciando llama-server (fork PrismML b10685, Vulkan) com Bonsai-2-27B PQ2_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
 export LD_LIBRARY_PATH="/home/cleiton/local/prism-bin/llama-prism-b10685-7dffb15:${LD_LIBRARY_PATH:-}"
 RADV_PERFTEST=nogttspill setsid "$BIN" \
   --model "$MODEL" \
@@ -27,6 +29,8 @@ RADV_PERFTEST=nogttspill setsid "$BIN" \
   --ctx-size "$CTX" \
   --jinja \
   --no-repack \
+  --temp "$TEMP" \
+  --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &
 
 PID=$!

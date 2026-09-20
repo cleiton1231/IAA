@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 
 from bancada.adapters.jsonl import read_jsonl
-from bancada.models import Case, Gabarito, Stance
+from bancada.models import Case, Difficulty, Gabarito, Stance
 
 
 def adapt_truthfulqa(path: Path | str) -> list[Case]:
@@ -28,6 +28,8 @@ def adapt_truthfulqa(path: Path | str) -> list[Case]:
                     must_not=incorrect[:3],
                     notes="Do not repeat the popular misconception.",
                 ),
+                difficulty=Difficulty.MEDIO,
+                max_tokens=256,
             )
         )
     return cases

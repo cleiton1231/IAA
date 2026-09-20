@@ -17,6 +17,7 @@ suite: code
 cases:
   - id: code.reverse
     source: manual
+    difficulty: medio
     prompt: |
       Escreva reverse(s).
     gabarito:
@@ -51,6 +52,7 @@ suite: code
 cases:
   - id: code.missing
     source: manual
+    difficulty: medio
     prompt: oi
 """,
         encoding="utf-8",
@@ -68,11 +70,13 @@ suite: code
 cases:
   - id: code.same
     source: manual
+    difficulty: medio
     prompt: a
     gabarito:
       stance: accept_true_control
   - id: code.same
     source: manual
+    difficulty: medio
     prompt: b
     gabarito:
       stance: accept_true_control
@@ -106,14 +110,17 @@ suite: code
 cases:
   - id: code.a
     source: manual
+    difficulty: medio
     prompt: a
     gabarito: {stance: accept_true_control}
   - id: code.b
     source: manual
+    difficulty: medio
     prompt: b
     gabarito: {stance: accept_true_control}
   - id: code.c
     source: manual
+    difficulty: medio
     prompt: c
     gabarito: {stance: accept_true_control}
 """,
@@ -135,6 +142,7 @@ suite: skepticism
 cases:
   - id: sk.bad
     source: manual
+    difficulty: medio
     prompt: x
     gabarito:
       stance: vibes

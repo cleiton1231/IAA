@@ -8,14 +8,18 @@ import statistics
 import sys
 from pathlib import Path
 
+from bancada.aggregate import format_enem_lines, summarize_run
 from bancada.client import Client
 from bancada.loader import load_named_suites
 from bancada.models import Run
-from bancada.packet import render_packet
+from bancada.packet import render_packet, render_packet_compact, write_auto_scores
 from bancada.runner import run_many
 from bancada.store import find_resumable_run, list_runs, load_run, save_run, save_scores
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
+DEFAULT_TEMPERATURE = 0.0
+DEFAULT_SEED = 42
+DEFAULT_MAX_TOKENS = 512
 
 
 def main(argv: list[str] | None = None, client: Client | None = None) -> int:
@@ -46,8 +50,9 @@ def _parser() -> argparse.ArgumentParser:
     smoke.add_argument("--suites-dir", default="suites")
     smoke.add_argument("--db", default=None, help="optional sqlite path")
     smoke.add_argument("--timeout", type=float, default=60.0)
-    smoke.add_argument("--max-tokens", type=int, default=1024)
-    smoke.add_argument("--temperature", type=float, default=None)
+    smoke.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
+    smoke.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    smoke.add_argument("--seed", type=int, default=DEFAULT_SEED)
     smoke.add_argument("--quiet", action="store_true")
     smoke.set_defaults(func=_cmd_smoke)
 
@@ -63,10 +68,11 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--max-tokens",
         type=int,
-        default=1024,
-        help="cap generation length (important for thinking models)",
+        default=DEFAULT_MAX_TOKENS,
+        help="global generation cap (never exceeds per-case YAML max_tokens)",
     )
-    run.add_argument("--temperature", type=float, default=None)
+    run.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    run.add_argument("--seed", type=int, default=DEFAULT_SEED)
     run.add_argument(
         "--resume",
         action="store_true",
@@ -79,6 +85,16 @@ def _parser() -> argparse.ArgumentParser:
     export.add_argument("run_id")
     export.add_argument("--db", default="data/bancada.sqlite")
     export.add_argument("--out", default=None)
+    export.add_argument(
+        "--full",
+        action="store_true",
+        help="full packet with every reply (debug); default is compact for OpenCode",
+    )
+    export.add_argument(
+        "--split-categories",
+        action="store_true",
+        help="write one packet MD per category next to --out",
+    )
     export.set_defaults(func=_cmd_export)
 
     ingest = sub.add_parser("ingest-scores")
@@ -97,6 +113,11 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--manifest", default="data/manifest.yaml")
     fetch.add_argument("--raw-dir", default="data/raw")
     fetch.add_argument("--suites-dir", default="suites")
+    fetch.add_argument(
+        "--only",
+        default=None,
+        help="comma-separated source ids to fetch (overrides enabled flags)",
+    )
     fetch.set_defaults(func=_cmd_fetch)
 
     listing = sub.add_parser("list")
@@ -111,6 +132,37 @@ def _client(args: argparse.Namespace, client: Client | None) -> Client:
     return Client(getattr(args, "endpoint", DEFAULT_ENDPOINT))
 
 
+def _p50(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return float(statistics.median(values))
+
+
+def _format_summary(run: Run) -> str:
+    n_total = len(run.results)
+    n_pass = sum(
+        1 for r in run.results if r.checks and all(chk.ok for chk in r.checks) and not r.error
+    )
+    pct = (n_pass / n_total * 100) if n_total else 0.0
+    latencies = [r.total_ms for r in run.results if r.error is None]
+    tps = [r.tokens_per_second for r in run.results if r.tokens_per_second is not None]
+    ttfts = [r.ttft_ms for r in run.results if r.ttft_ms is not None]
+    parts = [f"pass {n_pass}/{n_total} ({pct:.0f}%)"]
+    p50_ms = _p50(latencies)
+    if p50_ms is not None:
+        parts.append(f"p50: {p50_ms:.1f}ms")
+    p50_tps = _p50(tps)
+    if p50_tps is not None:
+        parts.append(f"p50 tok/s: {p50_tps:.1f}")
+    p50_ttft = _p50(ttfts)
+    if p50_ttft is not None:
+        parts.append(f"p50 ttft: {p50_ttft:.1f}ms")
+    summary = summarize_run(run)
+    lines = [" | ".join(parts)]
+    lines.extend(format_enem_lines(summary))
+    return "\n".join(lines)
+
+
 def _cmd_health(args: argparse.Namespace, client: Client | None) -> int:
     model_id = _client(args, client).health()
     print(model_id)
@@ -119,7 +171,7 @@ def _cmd_health(args: argparse.Namespace, client: Client | None) -> int:
 
 def _cmd_smoke(args: argparse.Namespace, client: Client | None) -> int:
     c = _client(args, client)
-    c.health()  # Raises HealthError if health check fails
+    c.health()
     names = [part.strip() for part in args.suites.split(",") if part.strip()]
     suites = load_named_suites(
         args.suites_dir,
@@ -150,19 +202,13 @@ def _cmd_smoke(args: argparse.Namespace, client: Client | None) -> int:
         on_progress=None if args.quiet else on_progress,
         max_tokens=args.max_tokens,
         temperature=args.temperature,
+        seed=args.seed,
     )
     if args.db:
         save_run(Path(args.db), run)
         print(f"saved {run.id}", flush=True)
 
-    n_total = len(run.results)
-    n_pass = sum(
-        1 for r in run.results if r.checks and all(chk.ok for chk in r.checks) and not r.error
-    )
-    pct = (n_pass / n_total * 100) if n_total else 0.0
-    latencies = [r.total_ms for r in run.results if r.error is None]
-    p50_ms = statistics.median(latencies) if latencies else 0.0
-    print(f"pass {n_pass}/{n_total} ({pct:.0f}%) | p50: {p50_ms:.1f}ms", flush=True)
+    print(_format_summary(run), flush=True)
     return 0
 
 
@@ -216,34 +262,43 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         on_progress=None if args.quiet else on_progress,
         max_tokens=args.max_tokens,
         temperature=args.temperature,
+        seed=args.seed,
         resume_run=resume_run,
         db_path=Path(args.db),
     )
     save_run(Path(args.db), run)
 
-    n_total = len(run.results)
-    n_pass = sum(
-        1 for r in run.results if r.checks and all(chk.ok for chk in r.checks) and not r.error
-    )
-    pct = (n_pass / n_total * 100) if n_total else 0.0
-    latencies = [r.total_ms for r in run.results if r.error is None]
-    p50_ms = statistics.median(latencies) if latencies else 0.0
-    print(f"pass {n_pass}/{n_total} ({pct:.0f}%) | p50: {p50_ms:.1f}ms", flush=True)
+    print(_format_summary(run), flush=True)
     print(f"saved {run.id}", flush=True)
     return 0
 
 
 def _cmd_export(args: argparse.Namespace, client: Client | None) -> int:
     del client
+    from bancada.packet import render_packets_by_category
+
     run = load_run(Path(args.db), args.run_id)
     if run is None:
         raise ValueError(f"unknown run {args.run_id}")
-    text = render_packet(run)
+
+    if args.full:
+        text = render_packet(run)
+    else:
+        text = render_packet_compact(run)
+
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
         print(str(out))
+        auto_path = out.parent / f"scores-{args.run_id}-auto.json"
+        write_auto_scores(auto_path, run)
+        print(str(auto_path))
+        if args.split_categories:
+            for cat, cat_text in render_packets_by_category(run, compact=not args.full):
+                cat_path = out.parent / f"{out.stem}-{cat}{out.suffix}"
+                cat_path.write_text(cat_text, encoding="utf-8")
+                print(str(cat_path))
     else:
         print(text)
     return 0
@@ -252,9 +307,39 @@ def _cmd_export(args: argparse.Namespace, client: Client | None) -> int:
 def _cmd_ingest(args: argparse.Namespace, client: Client | None) -> int:
     del client
     payload = json.loads(Path(args.scores_json).read_text(encoding="utf-8"))
+    run = load_run(Path(args.db), args.run_id)
+    if run is not None and run.judge_scores:
+        payload = _merge_scores(run.judge_scores, payload)
+    elif "auto" in payload or "cases" in payload:
+        # Merge auto list + judge cases if both present in one file
+        payload = _merge_scores(
+            {"cases": payload.get("auto") or []},
+            {"cases": payload.get("cases") or []},
+        ) if payload.get("auto") else payload
     save_scores(Path(args.db), args.run_id, payload)
     print(f"ingested {args.run_id}")
     return 0
+
+
+def _merge_scores(base: dict, override: dict) -> dict:
+    """Merge score lists by case id; override wins. Keeps auto+judge together."""
+    by_id: dict[str, dict] = {}
+    for key in ("auto", "cases"):
+        for item in base.get(key) or []:
+            if isinstance(item, dict) and item.get("id"):
+                by_id[str(item["id"])] = dict(item)
+    for key in ("auto", "cases"):
+        for item in override.get(key) or []:
+            if isinstance(item, dict) and item.get("id"):
+                cid = str(item["id"])
+                merged = dict(by_id.get(cid) or {})
+                merged.update(item)
+                by_id[cid] = merged
+    cases = list(by_id.values())
+    out = {k: v for k, v in {**base, **override}.items() if k not in ("auto", "cases")}
+    out["cases"] = cases
+    out["auto_merged"] = True
+    return out
 
 
 def _cmd_diff(args: argparse.Namespace, client: Client | None) -> int:
@@ -271,10 +356,14 @@ def _cmd_fetch(args: argparse.Namespace, client: Client | None) -> int:
     del client
     from bancada.fetch import fetch_manifest
 
+    only = None
+    if args.only:
+        only = {part.strip() for part in args.only.split(",") if part.strip()}
     written = fetch_manifest(
         Path(args.manifest),
         raw_dir=Path(args.raw_dir),
         suites_dir=Path(args.suites_dir),
+        only=only,
     )
     for path in written:
         print(path)
@@ -298,7 +387,6 @@ def _machine_pass(run: Run) -> float:
     return passed_cases / len(run.results)
 
 
-
 def _judge_avg(run: Run) -> float | None:
     scores = run.judge_scores
     if not scores:
@@ -311,13 +399,24 @@ def _judge_avg(run: Run) -> float | None:
 
 
 def _format_run_line(run: Run) -> str:
+    tps = [r.tokens_per_second for r in run.results if r.tokens_per_second is not None]
+    p50_tps = _p50(tps)
+    summary = summarize_run(run)
     line = (
         f"{run.id}  model={run.model_id}  cases={len(run.results)}  "
-        f"machine_pass={_machine_pass(run):.2f}"
+        f"machine_pass={_machine_pass(run):.2f}  enem={summary['enem_score']:.3f}"
     )
+    if summary["suspeito"]:
+        line += "  suspeito"
+    if p50_tps is not None:
+        line += f"  p50_tok/s={p50_tps:.1f}"
     judge = _judge_avg(run)
     if judge is not None:
         line += f"  judge={judge:.2f}"
+    fr = summary.get("fail_reasons") or {}
+    if fr:
+        top = ", ".join(f"{k}×{v}" for k, v in list(fr.items())[:4])
+        line += f"  fails=[{top}]"
     return line
 
 
@@ -326,12 +425,27 @@ def _format_diff(run_a: Run, run_b: Run) -> str:
         avg = _judge_avg(run)
         return "n/a" if avg is None else f"{avg:.2f}"
 
-    return (
-        f"{run_a.id} model={run_a.model_id} machine_pass={_machine_pass(run_a):.2f} "
-        f"judge={judge_label(run_a)}\n"
-        f"{run_b.id} model={run_b.model_id} machine_pass={_machine_pass(run_b):.2f} "
-        f"judge={judge_label(run_b)}"
-    )
+    def tps_label(run: Run) -> str:
+        vals = [r.tokens_per_second for r in run.results if r.tokens_per_second is not None]
+        p = _p50(vals)
+        return "n/a" if p is None else f"{p:.1f}"
+
+    sa = summarize_run(run_a)
+    sb = summarize_run(run_b)
+    lines = [
+        (
+            f"{run_a.id} model={run_a.model_id} machine_pass={_machine_pass(run_a):.2f} "
+            f"enem={sa['enem_score']:.3f} p50_tok/s={tps_label(run_a)} judge={judge_label(run_a)}"
+        ),
+        (
+            f"{run_b.id} model={run_b.model_id} machine_pass={_machine_pass(run_b):.2f} "
+            f"enem={sb['enem_score']:.3f} p50_tok/s={tps_label(run_b)} judge={judge_label(run_b)}"
+        ),
+    ]
+    lines.extend(format_enem_lines(sa))
+    lines.append("---")
+    lines.extend(format_enem_lines(sb))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

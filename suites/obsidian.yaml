@@ -1,12 +1,15 @@
-version: 2
+version: 4
 suite: obsidian
 cases:
   - id: obsidian.limpar-nota
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Reescreva a nota abaixo para o Obsidian: use um heading H1,
       parágrafos curtos e só wikilinks para [[Ponteiros]] e [[AEDS1]].
       Não invente outras matérias.
+      Responda em no máximo 8 linhas.
 
       ---
       hoje a aula de ponteiros foi louca malloc free e aeds1 tb
@@ -22,12 +25,15 @@ cases:
         allowed: ["Ponteiros", "AEDS1"]
   - id: obsidian.moc
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Crie um Map of Content (MOC) em Markdown ligando só estas notas:
       - [[Ponteiros]]
       - [[Vetores]]
       - [[Modularizacao]]
       Não invente links para outras aulas.
+      Responda em no máximo 8 linhas.
     gabarito:
       stance: accept_true_control
       notes: MOC só com os três alvos.
@@ -37,8 +43,11 @@ cases:
         allowed: ["Ponteiros", "Vetores", "Modularizacao"]
   - id: obsidian.resumo-fiel
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Resuma em até 5 linhas, sem fatos que não estejam no texto:
+      Responda em no máximo 8 linhas.
 
       Em AC2 vimos RISC-V RV32I: registradores x0–x31, x0 é zero,
       instruções add, addi, lw, sw. Não vimos ponto flutuante nesta aula.
@@ -51,9 +60,12 @@ cases:
       - type: not_empty
   - id: obsidian.flashcards
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Transforme o texto em 3 flashcards Markdown (Pergunta/Resposta).
       Só pode usar [[Ponteiros]] como wikilink.
+      Responda em no máximo 8 linhas.
 
       Ponteiro é um endereço. malloc aloca no heap. free devolve a memória.
     gabarito:
@@ -64,8 +76,11 @@ cases:
         allowed: ["Ponteiros"]
   - id: obsidian.headings
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Organize com headings ## o dump abaixo. Wikilinks só [[AEDS1]].
+      Responda em no máximo 8 linhas.
 
       ponteiros, vetores, alocação dinâmica, lista encadeada
     gabarito:
@@ -76,9 +91,12 @@ cases:
         allowed: ["AEDS1"]
   - id: obsidian.nao-inventar-prova
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Com base SÓ nisto, liste os tópicos da prova.
       Se faltar informação, diga que não está na nota.
+      Responda em no máximo 8 linhas.
 
       Nota: "prova dia 20, conteúdo = unidades 2 e 3."
     gabarito:
@@ -89,9 +107,12 @@ cases:
       - type: not_empty
   - id: obsidian.diario
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Transforme o diário bagunçado numa nota com H1 "2026-09-10"
       e wikilink só para [[DocMind]].
+      Responda em no máximo 8 linhas.
 
       mexi no rag do docmind, bm25 + chroma, rerank caiu
     gabarito:
@@ -102,9 +123,12 @@ cases:
         allowed: ["DocMind"]
   - id: obsidian.links-proibidos
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Limpe a nota. Wikilinks permitidos: só [[Ponteiros]].
       Se quiser citar outra coisa, use texto simples, não [[outra]].
+      Responda em no máximo 8 linhas.
 
       ponteiros e também [[Cálculo]] e [[Física]]
     gabarito:
@@ -114,3 +138,38 @@ cases:
       - type: not_empty
       - type: wikilink_allowlist
         allowed: ["Ponteiros"]
+
+  - id: obsidian.cite-so-dump
+    source: manual
+    difficulty: medio
+    max_tokens: 384
+    prompt: |
+      Com base só no dump abaixo, diga a data da prova. Cite só o que está no texto.
+      Se a data não aparecer, diga que não consta.
+      Responda em no máximo 8 linhas.
+
+      ---
+      # AC2
+      Aula sobre RISC-V. Exercícios no moodle. Sem data de prova neste trecho.
+      ---
+    gabarito:
+      stance: ask_for_source
+      must_not: ["15 de"]
+      notes: Não inventar data de prova.
+    machine_checks:
+      - type: not_empty
+  - id: obsidian.flashcards-2
+    source: manual
+    difficulty: medio
+    max_tokens: 384
+    prompt: |
+      Faça exatamente 2 flashcards (Pergunta/Resposta) e use só um wikilink [[Heap]].
+      Responda em no máximo 8 linhas.
+
+      Heap é memória dinâmica. Stack guarda frames de chamada.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: not_empty
+      - type: wikilink_allowlist
+        allowed: ["Heap"]

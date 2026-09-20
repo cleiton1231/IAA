@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from bancada.adapters.jsonl import read_jsonl
-from bancada.models import Case, Gabarito, MachineCheck, Stance
+from bancada.models import Case, Difficulty, Gabarito, MachineCheck, Stance
 
 
 def adapt_bfcl(path: Path | str) -> list[Case]:
@@ -29,6 +29,8 @@ def adapt_bfcl(path: Path | str) -> list[Case]:
                 tools=tools or None,
                 gabarito=Gabarito(stance=stance, notes=notes),
                 machine_checks=[MachineCheck(type="tool_name", expected=expected)],
+                difficulty=Difficulty.MEDIO,
+                max_tokens=256,
             )
         )
     return cases

@@ -1,11 +1,14 @@
-version: 2
+version: 4
 suite: code
 cases:
   - id: code.reverse
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Escreva em Python a função reverse(s) que devolve a string invertida.
       Responda com um único bloco ```python contendo a função completa.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Função pura, sem I/O.
@@ -16,6 +19,8 @@ cases:
           assert reverse("") == ""
   - id: code.off-by-one
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Corrija a função para somar todos os inteiros de 1 até n, inclusive.
       Hoje ela está assim:
@@ -27,6 +32,7 @@ cases:
           return total
 
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: range(n) exclui n; precisa range(1, n+1) ou equivalente.
@@ -37,10 +43,13 @@ cases:
           assert soma_ate(3) == 6
   - id: code.parse-json
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Escreva get_nome(texto) que recebe um JSON em string como
       '{"nome": "Ana"}' e devolve o valor de nome.
       Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: json.loads; não inventar parser.
@@ -50,10 +59,13 @@ cases:
           assert get_nome('{"nome": "Ana"}') == "Ana"
   - id: code.unique
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Escreva unicos(xs) que devolve os valores de xs sem duplicata,
       preservando a primeira ocorrência.
       Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
     machine_checks:
@@ -62,10 +74,13 @@ cases:
           assert unicos([1, 2, 1, 3]) == [1, 2, 3]
   - id: code.palindrome
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Escreva eh_palindromo(s) que ignora maiúsculas e devolve True
       se s lido de trás para frente é igual.
       Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
     machine_checks:
@@ -75,9 +90,12 @@ cases:
           assert eh_palindromo("casa") is False
   - id: code.none-safe
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Escreva tamanho(xs) que devolve len(xs) ou 0 se xs is None.
       Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
     machine_checks:
@@ -87,9 +105,12 @@ cases:
           assert tamanho([1, 2]) == 2
   - id: code.clamp
     source: manual
+    difficulty: facil
+    max_tokens: 384
     prompt: |
       Escreva clamp(x, lo, hi) que limita x ao intervalo [lo, hi].
       Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
     machine_checks:
@@ -100,11 +121,14 @@ cases:
           assert clamp(99, 0, 10) == 10
   - id: code.invented-api
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       Usando SOMENTE a função já existente `ler_nota(path) -> str`
       (não existe `obsidian_read` nem `vault.get`), escreva
       titulo_da_nota(path) que devolve a primeira linha de ler_nota(path).
       Não invente outras APIs. Responda com um único bloco ```python.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       must_not: ["obsidian_read", "vault.get"]
@@ -117,6 +141,8 @@ cases:
           assert titulo_da_nota("x.md") == "# Ponteiros"
   - id: code.bug-off-by-one
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `obter_intervalo(lista, inicio, fim)` deve retornar uma fatia com todos os elementos desde o índice `inicio` até o índice `fim`, inclusive.
       Hoje ela possui um bug de off-by-one e exclui o elemento final:
@@ -125,6 +151,7 @@ cases:
           return lista[inicio:fim]
 
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: range/slice exclusivo precisa ir até fim + 1.
@@ -135,6 +162,8 @@ cases:
           assert obter_intervalo(["a", "b", "c"], 0, 0) == ["a"]
   - id: code.bug-mutable-default
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `acumular_registro(item, registros=[])` possui o bug de valor padrão mutável, acumulando itens entre chamadas sucessivas.
       Hoje ela está assim:
@@ -145,6 +174,7 @@ cases:
 
       Corrija a função para que cada chamada sem o argumento `registros` forneça uma lista nova e independente.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Padrão mutável em argumento de função.
@@ -157,6 +187,8 @@ cases:
           assert r2 == ["segundo"]
   - id: code.bug-none-is
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `verificar_estado(obj)` deve retornar "vazio" quando `obj` é None, ou "preenchido" caso contrário.
       Hoje ela usa igualdade de valor `obj == None`:
@@ -169,6 +201,7 @@ cases:
       Essa comparação quebra quando `obj` implementa `__eq__` que lança exceção ou exige tipo específico.
       Corrija a função utilizando a verificação por identidade (`is None`).
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Usar is None para checagem segura de sentinela.
@@ -182,6 +215,8 @@ cases:
           assert verificar_estado(ObjetoCustomizado()) == "preenchido"
   - id: code.bug-shadow
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `aplicar_taxa(taxa, precos)` deveria calcular o preço total aplicando a `taxa` fixa a todos os itens.
       No entanto, a variável de controle do loop possui o mesmo nome do parâmetro `taxa`, sobrepondo o valor original:
@@ -194,6 +229,7 @@ cases:
 
       Corrija a função renomeando a variável de iteração para que a taxa original seja aplicada a cada preço.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Renomear variável de loop para evitar sombreamento de parâmetro.
@@ -204,6 +240,8 @@ cases:
           assert aplicar_taxa(0.0, [50.0]) == 50.0
   - id: code.bug-fstring
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `formatar_log(nivel, codigo, mensagem)` deve retornar a string formatada no padrão `"[NIVEL] (CODIGO) - MENSAGEM"`.
       Hoje ela falha com `TypeError` quando `codigo` é um número inteiro devido à concatenação ingênua de strings:
@@ -213,6 +251,7 @@ cases:
 
       Corrija a função usando f-string para suportar qualquer tipo em `codigo`.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Interpolação via f-string evitando TypeError em inteiros.
@@ -223,6 +262,8 @@ cases:
           assert formatar_log("ERRO", 404, "Nao encontrado") == "[ERRO] (404) - Nao encontrado"
   - id: code.bug-path-join
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `unir_caminho(diretorio, arquivo)` deve unir diretório e arquivo garantindo que o caminho resultante não contenha barras duplas (`//`) caso `diretorio` termine com barra (`/`).
       Hoje ela está assim:
@@ -232,6 +273,7 @@ cases:
 
       Corrija a função utilizando `os.path` ou `pathlib` para que o caminho retornado seja limpo e normalizado.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: os.path ou pathlib evitando barras duplas.
@@ -246,6 +288,8 @@ cases:
           assert "//" not in c1
   - id: code.bug-tz-naive
     source: manual
+    difficulty: dificil
+    max_tokens: 384
     prompt: |
       A função `prazo_vencido(limite_utc)` recebe um objeto `datetime` com fuso horário UTC (offset-aware) e deve retornar `True` se o momento atual já ultrapassou esse prazo.
       A implementação atual usa `datetime.now()` sem timezone (offset-naive), gerando erro de comparação:
@@ -258,6 +302,7 @@ cases:
 
       Corrija a função para obter o horário atual com `timezone.utc` (ou compatível com `limite_utc`), permitindo a comparação correta.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: datetime com timezone UTC evitando comparação naive vs aware.
@@ -271,6 +316,8 @@ cases:
           assert prazo_vencido(futuro) is False
   - id: code.bug-sort-dict
     source: manual
+    difficulty: medio
+    max_tokens: 384
     prompt: |
       A função `ordenar_por_idade(registros)` recebe uma lista de dicionários onde cada elemento possui as chaves `"nome"` e `"idade"`. Ela deve retornar uma nova lista ordenada pela `"idade"` de forma crescente.
       A implementação atual tenta chamar `sorted` diretamente nos dicionários sem especificar uma função chave:
@@ -281,6 +328,7 @@ cases:
       Isso falha com `TypeError: '<' not supported between instances of 'dict' and 'dict'`.
       Corrija a função definindo o parâmetro `key` para ordenar corretamente pelo campo `"idade"`.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: "Ordenar dicionários especificando key=lambda x: x['idade']."
@@ -293,6 +341,8 @@ cases:
           assert [d["nome"] for d in resultado] == ["Ana", "Carlos", "Beto"]
   - id: code.bug-re-greedy
     source: manual
+    difficulty: dificil
+    max_tokens: 384
     prompt: |
       A função `extrair_tag_nomeada(texto)` deve encontrar a PRIMEIRA ocorrência do padrão `<tag>conteudo</tag>` e retornar apenas o conteúdo interno através de um grupo nomeado regex chamado `valor` (`(?P<valor>...)`).
       A implementação atual usa uma regex gulosa que engole além da primeira tag de fechamento e não utiliza o grupo nomeado:
@@ -307,6 +357,7 @@ cases:
 
       Corrija a função tornando a captura não-gulosa e utilizando o grupo nomeado `valor` para retornar `match.group("valor")`.
       Responda com um único bloco ```python contendo a função corrigida.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Regex não-gulosa com grupo nomeado valor.
@@ -318,6 +369,8 @@ cases:
           assert extrair_tag_nomeada("sem tags") is None
   - id: code.bug-twomodule
     source: manual
+    difficulty: dificil
+    max_tokens: 384
     prompt: |
       No pacote `code_twomodule` temos o módulo utilitário `code_twomodule.util`:
       ```python
@@ -333,6 +386,7 @@ cases:
       ```
       Corrija o arquivo `caller.py` para importar o nome correto `formatar_moeda` e invocar a função devidamente.
       Responda com um único bloco ```python contendo o módulo `caller.py` completo.
+      Responda só com um bloco ```python, sem prosa.
     gabarito:
       stance: accept_true_control
       notes: Correção de importação entre módulos util e caller.
@@ -340,3 +394,73 @@ cases:
       - type: python_test
         source: |
           assert gerar_recibo("Teclado", 150.0) == "Item: Teclado - Total: R$ 150.00"
+
+  - id: code.freq-count
+    source: manual
+    difficulty: dificil
+    max_tokens: 384
+    prompt: |
+      Escreva em Python a função freq(items) que devolve um dict
+      contagem item -> vezes. Lista vazia -> {}.
+      Responda só com um bloco ```python, sem prosa.
+    gabarito:
+      stance: accept_true_control
+      notes: Contagem pura.
+    machine_checks:
+      - type: python_test
+        source: |
+          assert freq([1, 1, 2, 1]) == {1: 3, 2: 1}
+          assert freq([]) == {}
+  - id: code.nested-get
+    source: manual
+    difficulty: dificil
+    max_tokens: 384
+    prompt: |
+      Escreva nested_get(d, keys, default=None) que percorre dicts aninhados
+      pela lista de chaves e devolve default se faltar chave.
+      Responda só com um bloco ```python, sem prosa.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          d = {"a": {"b": 2}}
+          assert nested_get(d, ["a", "b"]) == 2
+          assert nested_get(d, ["a", "c"], default=0) == 0
+          assert nested_get(d, ["x"], default=None) is None
+  - id: code.merge-dicts
+    source: manual
+    difficulty: dificil
+    max_tokens: 384
+    prompt: |
+      Escreva merge_dicts(a, b) que devolve um novo dict com chaves de a e b
+      (b sobrescreve). Não mute a nem b.
+      Responda só com um bloco ```python, sem prosa.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          a = {"x": 1}; b = {"y": 2}
+          c = merge_dicts(a, b)
+          assert c == {"x": 1, "y": 2}
+          assert a == {"x": 1}
+          assert b == {"y": 2}
+          assert merge_dicts({"k": 1}, {"k": 9}) == {"k": 9}
+  - id: code.parse-ymd
+    source: manual
+    difficulty: dificil
+    max_tokens: 384
+    prompt: |
+      Escreva parse_ymd(s) que aceita só "YYYY-MM-DD" estrito e devolve
+      (y, m, d) ou None se inválido (mês/dia fora do range ou formato solto).
+      Responda só com um bloco ```python, sem prosa.
+    gabarito:
+      stance: accept_true_control
+    machine_checks:
+      - type: python_test
+        source: |
+          assert parse_ymd("2026-09-20") == (2026, 9, 20)
+          assert parse_ymd("2026-13-01") is None
+          assert parse_ymd("nope") is None
+          assert parse_ymd("2026-9-1") is None

@@ -1,80 +1,74 @@
 # Bancada
 
-Régua pessoal para modelos locais (até ~32B quantizados). Você sobe o `llama-server`, a Bancada dispara as mesmas provas, e o **Grok no chat** pontua com gabarito. Sem leaderboard de desconhecido e sem gastar VRAM com juiz.
+Régua pessoal para modelos locais (até ~32B quantizados). Você sobe o `llama-server`, a Bancada dispara as mesmas provas, e o **OpenCode** pontua o packet compacto. Sem leaderboard de desconhecido e sem gastar VRAM com juiz dedicado.
 
 ## Fluxo
 
 ```bash
 pip install -e '.[dev]'
 
-# 1. modelo já no ar
 curl -s 127.0.0.1:8080/v1/models
-
 bancada health --endpoint http://127.0.0.1:8080/v1
 
-# 2. (opcional) fatias públicas, ~1–2 MB de download, teto 50 MB
+# opcional: só HumanEval (~45 KB), cap 12
 bancada fetch
 
-# 3. teste prático completo (recomendado: progresso + nohup)
 ./scripts/practical_run.sh
-# ou manual:
+# (com `code` na lista, importa HumanEval cap 12; BANCADA_IMPORTED=0 para desligar)
+# ou:
 bancada run --endpoint http://127.0.0.1:8080/v1 \
-  --suites skepticism,code,obsidian,tools --no-imported \
-  --max-tokens 1024
+  --suites skepticism,code,obsidian,tools --imported --cap 12 \
+  --temperature 0 --seed 42 --max-tokens 512
 
 bancada list
-
-# 4. cola o packet no Grok
 bancada export-judge RUN_ID --out reports/packet.md
+# → reports/packet.md + reports/scores-RUN_ID-auto.json
 
-# 5. guarda o JSON que o Grok devolver
+# OpenCode preenche needs_judge; ingest mescla auto+judge:
 bancada ingest-scores RUN_ID scores.json
 bancada diff RUN_A RUN_B
 ```
 
-`bancada run` imprime `[n/N] start|ok|fail` por caso (use `--quiet` para silenciar). `--max-tokens` (default 1024) evita que modelos “thinking” esgotem o timeout.
+Defaults de bench: `temperature=0`, `seed=42`, `max-tokens=512` (env: `BANCADA_TEMP`, `BANCADA_SEED`, `BANCADA_MAX_TOKENS`). Cada caso YAML pode ter teto menor (`max_tokens`) e `difficulty` (facil/medio/dificil) para o placar ENEM.
 
-O juiz lê `JUDGE.md`. Não inventa rubrica.
+O juiz lê `JUDGE.md`. Auto-score cobre `python_test`, replies vazias e recusas com args perigosos. Packet mostra `enem_score` (âncora facil=+3) e flag `suspeito`.
 
 ## Disco
 
-| Fonte | Uso | Tamanho bruto | Cap default |
-|-------|-----|---------------|-------------|
-| HumanEval | código | ~45 KB gzip | 40 |
-| BFCL simple + irrelevance | tools | ~440 KB | 20+20 |
-| TruthfulQA | ceticismo | ~500 KB | 20 |
-| FalseQA | premissa falsa | ~220 KB | 15 |
-| small-llm-blind-spots | falhas de modelo pequeno | ~25 KB | 30 |
+| Fonte | Uso | Tamanho bruto | Cap default | Enabled |
+|-------|-----|---------------|-------------|---------|
+| HumanEval | código | ~45 KB gzip | 12 | sim |
+| BFCL / TruthfulQA / FalseQA / blind-spots | — | — | — | **não** (urls no manifesto, fetch ignora) |
 
-Cache típico `data/raw/`: **~1,2 MB**. Teto do manifesto: **50 MB** (`data/manifest.yaml`). Passou disso, o fetch aborta.
+Cache típico `data/raw/`: **~45 KB** com só HumanEval. Teto: **50 MB**.
 
-**Não baixamos:** SWE-bench, The Stack, APPS, MMLU, LiveCodeBench, 10k sycophancy, nenhum repositório-fonte.
+**Não baixamos:** SWE-bench, The Stack, APPS, MMLU, LiveCodeBench, BFCL v4 agentic.
 
 ## CLI
 
 | Comando | Função |
 |---------|--------|
 | `bancada health` | GET `/v1/models` |
-| `bancada fetch` | jsonl pinado por sha256 → `suites/imported/` |
+| `bancada fetch [--only id]` | fontes `enabled` do manifesto |
 | `bancada run --suites a,b [--imported] [--cap N]` | 1 geração por vez |
-| `bancada export-judge RUN_ID` | Markdown para o Grok |
-| `bancada ingest-scores RUN_ID scores.json` | persiste o veredito |
-| `bancada diff A B` | pass-rate de máquina + média do juiz |
+| `bancada export-judge RUN_ID [--full]` | packet compacto + auto JSON |
+| `bancada ingest-scores RUN_ID scores.json` | mescla auto+judge e persiste |
+| `bancada diff A B` | machine_pass + enem + p50 tok/s + juiz |
 
 Endpoint default: `http://127.0.0.1:8080/v1`. Bind só em localhost.
 
 ## Layout
 
-- `suites/*.yaml` — casos manuais (git)
+- `suites/*.yaml` — casos manuais (git), **version 4** (~66 casos)
 - `suites/imported/` — gerado pelo fetch
-- `data/manifest.yaml` — URLs + sha256 + caps
-- `data/raw/` — cache gitignored
-- `JUDGE.md` / `AGENTS.md` — rubrica do juiz no chat
+- `data/manifest.yaml` — URLs + sha256 + caps + enabled
+- `JUDGE.md` / `AGENTS.md` — rubrica do juiz OpenCode
 
 ## Testes
 
 ```bash
 pytest
+ruff check src tests
 ```
 
 Fetch e adapters usam fixtures locais. **Nenhum teste bate na rede.**

@@ -16,6 +16,12 @@ class Stance(str, Enum):
     RESIST_SYCOPHANCY = "resist_sycophancy"
 
 
+class Difficulty(str, Enum):
+    FACIL = "facil"
+    MEDIO = "medio"
+    DIFICIL = "dificil"
+
+
 class Gabarito(BaseModel):
     stance: Stance
     must_cover: list[str] = Field(default_factory=list)
@@ -45,6 +51,8 @@ class Case(BaseModel):
     machine_checks: list[MachineCheck] = Field(default_factory=list)
     fake_tool_response: str | None = None
     turn2_prompt: str | None = None
+    difficulty: Difficulty
+    max_tokens: int | None = None
 
 
 class Suite(BaseModel):
@@ -73,6 +81,13 @@ class CaseResult(BaseModel):
     checks: list[CheckOutcome] = Field(default_factory=list)
     total_ms: float = 0.0
     ttft_ms: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    tokens_per_second: float | None = None
+    prompt_per_second: float | None = None
+    fail_class: str = "ok"
+    fail_reason: str = ""
+    difficulty: Difficulty | None = None
     error: str | None = None
     gabarito: Gabarito
 
@@ -87,3 +102,4 @@ class Run(BaseModel):
     max_tokens: int | None = None
     timeout: float | None = None
     temperature: float | None = None
+    seed: int | None = None

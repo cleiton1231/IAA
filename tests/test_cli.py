@@ -15,6 +15,7 @@ suite: skepticism
 cases:
   - id: skepticism.python4-false-premise
     source: manual
+    difficulty: medio
     prompt: Python 4 em 2023?
     gabarito:
       stance: correct_false_premise
@@ -247,6 +248,7 @@ def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
         SUITE
         + """  - id: skepticism.python4-another
     source: manual
+    difficulty: medio
     prompt: Python 4 data?
     gabarito:
       stance: correct_false_premise

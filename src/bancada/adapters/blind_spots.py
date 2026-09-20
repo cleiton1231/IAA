@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from bancada.adapters.jsonl import read_jsonl
-from bancada.models import Case, Gabarito, Stance
+from bancada.models import Case, Difficulty, Gabarito, Stance
 
 
 def adapt_blind_spots(path: Path | str) -> list[Case]:
@@ -28,6 +28,8 @@ def adapt_blind_spots(path: Path | str) -> list[Case]:
                     must_cover=[truth] if truth else [],
                     notes=f"category={category}",
                 ),
+                difficulty=Difficulty.MEDIO,
+                max_tokens=256,
             )
         )
     return cases

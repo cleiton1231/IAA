@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from bancada.adapters.jsonl import read_jsonl
-from bancada.models import Case, Gabarito, MachineCheck, Stance
+from bancada.models import Case, Difficulty, Gabarito, MachineCheck, Stance
 
 
 def adapt_humaneval(path: Path | str) -> list[Case]:
@@ -34,6 +34,8 @@ def adapt_humaneval(path: Path | str) -> list[Case]:
                         setup=prompt,
                     )
                 ],
+                difficulty=Difficulty.DIFICIL,
+                max_tokens=384,
             )
         )
     return cases
