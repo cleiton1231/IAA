@@ -74,6 +74,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
     run.add_argument("--seed", type=int, default=DEFAULT_SEED)
     run.add_argument(
+        "--harness",
+        choices=["direct", "pi"],
+        default="direct",
+        help="run cases through the pi coding-agent harness",
+    )
+    run.add_argument(
         "--resume",
         action="store_true",
         help="resume previous incomplete run for this model and suites",
@@ -130,6 +136,18 @@ def _client(args: argparse.Namespace, client: Client | None) -> Client:
     if client is not None:
         return client
     return Client(getattr(args, "endpoint", DEFAULT_ENDPOINT))
+
+
+def _build_client(args: argparse.Namespace, client: Client | None):
+    """Return (scoring_client, health_model_id) honoring --harness."""
+    direct = _client(args, client)
+    health_model = direct.health()
+    if getattr(args, "harness", "direct") != "pi":
+        return direct, health_model
+    from bancada.harness_pi import PiClient
+
+    pi_client = PiClient(endpoint="pi://local")
+    return pi_client, health_model
 
 
 def _p50(values: list[float]) -> float | None:
@@ -222,8 +240,8 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         cap=args.cap,
     )
     total = sum(len(suite.cases) for suite in suites)
-    c = _client(args, client)
-    model_id = c.health()
+    c, health_model = _build_client(args, client)
+    model_id = health_model
     versions = {suite.name: suite.version for suite in suites}
 
     resume_run = None
@@ -265,6 +283,7 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         seed=args.seed,
         resume_run=resume_run,
         db_path=Path(args.db),
+        harness=getattr(args, "harness", "direct"),
     )
     save_run(Path(args.db), run)
 
@@ -408,6 +427,8 @@ def _format_run_line(run: Run) -> str:
     )
     if summary["suspeito"]:
         line += "  suspeito"
+    if getattr(run, "harness", "direct") != "direct":
+        line += f"  harness={run.harness}"
     if p50_tps is not None:
         line += f"  p50_tok/s={p50_tps:.1f}"
     judge = _judge_avg(run)

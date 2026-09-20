@@ -103,3 +103,4 @@ class Run(BaseModel):
     timeout: float | None = None
     temperature: float | None = None
     seed: int | None = None
+    harness: str = "direct"

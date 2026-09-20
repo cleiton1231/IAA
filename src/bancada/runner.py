@@ -177,6 +177,7 @@ def run_many(
     seed: int | None = None,
     resume_run: Run | None = None,
     db_path: Path | str | None = None,
+    harness: str = "direct",
 ) -> Run:
     model_id = client.health()
     cases = [case for suite in suites for case in suite.cases]
@@ -240,6 +241,7 @@ def run_many(
                     timeout=case_timeout,
                     temperature=temperature,
                     seed=seed,
+                    harness=harness,
                 ),
             )
 
@@ -253,6 +255,7 @@ def run_many(
         timeout=case_timeout,
         temperature=temperature,
         seed=seed,
+        harness=harness,
     )
 
 

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS runs (
     timeout REAL,
     temperature REAL,
     seed INTEGER,
+    harness TEXT,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE TABLE IF NOT EXISTS case_results (
@@ -47,6 +48,7 @@ def _connect(path: Path) -> sqlite3.Connection:
         ("timeout", "REAL"),
         ("temperature", "REAL"),
         ("seed", "INTEGER"),
+        ("harness", "TEXT"),
     ]:
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {col_type}")
@@ -59,8 +61,9 @@ def save_run(path: Path | str, run: Run) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO runs
-            (id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed)
-            VALUES (?,?,?,?,?,?,?,?)
+            (id, model_id, endpoint, suite_versions, max_tokens,
+             timeout, temperature, seed, harness)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """,
             (
                 run.id,
@@ -71,6 +74,7 @@ def save_run(path: Path | str, run: Run) -> None:
                 run.timeout,
                 run.temperature,
                 run.seed,
+                run.harness,
             ),
         )
         conn.execute("DELETE FROM case_results WHERE run_id = ?", (run.id,))
@@ -89,7 +93,7 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
     try:
         row = conn.execute(
             """
-            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed
+            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed, harness
             FROM runs WHERE id = ?
             """,
             (run_id,),
@@ -113,6 +117,7 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
             timeout=row[5],
             temperature=row[6],
             seed=row[7],
+            harness=row[8] or "direct",
             results=[json.loads(item[0]) for item in payloads],
             judge_scores=json.loads(score_row[0]) if score_row else None,
         )
