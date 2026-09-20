@@ -93,7 +93,8 @@ def load_run(path: Path | str, run_id: str) -> Run | None:
     try:
         row = conn.execute(
             """
-            SELECT id, model_id, endpoint, suite_versions, max_tokens, timeout, temperature, seed, harness
+            SELECT id, model_id, endpoint, suite_versions, max_tokens,
+                   timeout, temperature, seed, harness
             FROM runs WHERE id = ?
             """,
             (run_id,),
