@@ -86,6 +86,12 @@ def _parser() -> argparse.ArgumentParser:
         help="keep pi's full default system prompt instead of the lean direct one",
     )
     run.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="parallel case execution (server must have free slots; pi harness benefits most)",
+    )
+    run.add_argument(
         "--resume",
         action="store_true",
         help="resume previous incomplete run for this model and suites",
@@ -293,6 +299,7 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         resume_run=resume_run,
         db_path=Path(args.db),
         harness=getattr(args, "harness", "direct"),
+        workers=max(1, int(getattr(args, "workers", 1) or 1)),
     )
     save_run(Path(args.db), run)
 

@@ -254,7 +254,6 @@ class PiClient:
         self.llama_endpoint = llama_endpoint
         self.lean = lean
         self._runner = _runner
-        self._last_tool_calls: list[dict[str, Any]] = []
 
     def health(self) -> str:
         """Report the llama-server model id so runs stay comparable."""
@@ -312,9 +311,12 @@ class PiClient:
         sidecar_calls = self._read_sidecar(log_path)
         if sidecar_calls:
             events["tool_calls"] = sidecar_calls
-        if any(m.get("role") == "tool" for m in messages):
-            events["tool_calls"] = self._last_tool_calls + events["tool_calls"]
-        self._last_tool_calls = events["tool_calls"]
+        history_calls = _history_tool_calls(messages)
+        if history_calls:
+            merged = {c["id"]: c for c in history_calls}
+            for c in events["tool_calls"]:
+                merged.setdefault(c["id"], c)
+            events["tool_calls"] = list(merged.values())
         return ChatResult(
             text=events["text"],
             tool_calls=events["tool_calls"],
@@ -369,3 +371,32 @@ class PiClient:
         if proc.returncode != 0 and not proc.stdout.strip():
             raise ChatError(f"pi exited rc={proc.returncode}: {proc.stderr[:200]}")
         return proc.stdout
+
+
+def _history_tool_calls(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract tool calls already present in the message history (OpenAI format)."""
+    calls: list[dict[str, Any]] = []
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for raw in msg.get("tool_calls") or []:
+            if not isinstance(raw, dict):
+                continue
+            func = raw.get("function") if isinstance(raw.get("function"), dict) else {}
+            name = func.get("name") or raw.get("name")
+            if not name:
+                continue
+            args = func.get("arguments", raw.get("arguments", {}))
+            calls.append(
+                {
+                    "id": str(raw.get("id") or len(calls) + 1),
+                    "type": "function",
+                    "function": {
+                        "name": str(name),
+                        "arguments": args
+                        if isinstance(args, str)
+                        else json.dumps(args, ensure_ascii=False),
+                    },
+                }
+            )
+    return calls

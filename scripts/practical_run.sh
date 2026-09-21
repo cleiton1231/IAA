@@ -49,6 +49,7 @@ nohup python -m bancada.cli run \
   --temperature "$TEMP" \
   --seed "$SEED" \
   --harness "${BANCADA_HARNESS:-direct}" \
+  --workers "${BANCADA_WORKERS:-1}" \
   >"$LOG" 2>&1 &
 echo $! >"$PIDFILE"
 PID="$(cat "$PIDFILE")"

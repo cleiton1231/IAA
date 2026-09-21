@@ -178,6 +178,7 @@ def run_many(
     resume_run: Run | None = None,
     db_path: Path | str | None = None,
     harness: str = "direct",
+    workers: int = 1,
 ) -> Run:
     model_id = client.health()
     cases = [case for suite in suites for case in suite.cases]
@@ -192,23 +193,36 @@ def run_many(
             if not r.error:
                 existing[r.case_id] = r
 
-    for index, case in enumerate(cases, start=1):
-        if case.id in existing:
-            result = existing[case.id]
-            results.append(result)
-            if on_progress:
-                if result.error or not result.checks:
-                    machine_ok = False
-                else:
-                    machine_ok = all(check.ok for check in result.checks)
-                on_progress("done", index, total, case.id, machine_ok, result)
-            continue
+    def _machine_ok(result: CaseResult) -> bool:
+        if result.error or not result.checks:
+            return False
+        return all(check.ok for check in result.checks)
 
-        if on_progress:
-            on_progress("start", index, total, case.id)
+    def _save_checkpoint() -> None:
+        if db_path is None:
+            return
+        from bancada.store import save_run
 
+        ordered = [results_by_index[i] for i in sorted(results_by_index)]
+        save_run(
+            db_path,
+            Run(
+                id=effective_run_id,
+                model_id=model_id,
+                endpoint=client.endpoint,
+                suite_versions=versions,
+                results=ordered,
+                max_tokens=max_tokens,
+                timeout=case_timeout,
+                temperature=temperature,
+                seed=seed,
+                harness=harness,
+            ),
+        )
+
+    def _execute(index: int, case: Case) -> CaseResult:
         case_max = effective_max_tokens(case, max_tokens)
-        result = run_case(
+        return run_case(
             client,
             case,
             timeout=case_timeout,
@@ -217,33 +231,49 @@ def run_many(
             temperature=temperature,
             seed=seed,
         )
-        results.append(result)
 
+    results_by_index: dict[int, CaseResult] = {}
+    pending: list[tuple[int, Case]] = []
+    for index, case in enumerate(cases, start=1):
+        if case.id in existing:
+            result = existing[case.id]
+            results_by_index[index] = result
+            if on_progress:
+                on_progress("done", index, total, case.id, _machine_ok(result), result)
+            continue
+        pending.append((index, case))
+
+    def _emit_done(index: int, case_id: str, result: CaseResult) -> None:
         if on_progress:
-            if result.error or not result.checks:
-                machine_ok = False
-            else:
-                machine_ok = all(check.ok for check in result.checks)
-            on_progress("done", index, total, case.id, machine_ok, result)
+            on_progress("done", index, total, case_id, _machine_ok(result), result)
 
-        if db_path is not None:
-            from bancada.store import save_run
+    if workers <= 1:
+        for index, case in pending:
+            if on_progress:
+                on_progress("start", index, total, case.id)
+            result = _execute(index, case)
+            results_by_index[index] = result
+            _emit_done(index, case.id, result)
+            _save_checkpoint()
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from threading import Lock
 
-            save_run(
-                db_path,
-                Run(
-                    id=effective_run_id,
-                    model_id=model_id,
-                    endpoint=client.endpoint,
-                    suite_versions=versions,
-                    results=list(results),
-                    max_tokens=max_tokens,
-                    timeout=case_timeout,
-                    temperature=temperature,
-                    seed=seed,
-                    harness=harness,
-                ),
-            )
+        save_lock = Lock()
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(_execute, index, case): (index, case)
+                for index, case in pending
+            }
+            for future in as_completed(futures):
+                index, case = futures[future]
+                result = future.result()
+                results_by_index[index] = result
+                _emit_done(index, case.id, result)
+                with save_lock:
+                    _save_checkpoint()
+
+    results = [results_by_index[i] for i in sorted(results_by_index)]
 
     return Run(
         id=effective_run_id,

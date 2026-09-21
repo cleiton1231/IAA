@@ -422,3 +422,39 @@ def test_runner_resume_skips_already_executed_cases() -> None:
     assert final_run.results[1].reply == "ok"
 
 
+
+
+def test_run_many_parallel_keeps_order(tmp_path) -> None:
+    import time as _time
+
+    from bancada.runner import run_many
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "toy-model"}]})
+        code = "```python\ndef reverse(s):\n    return s[::-1]\n```"
+        _time.sleep(0.3)
+        return httpx.Response(200, json={"choices": [{"message": {"content": code}}]})
+
+    client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
+    cases = []
+    for i in range(6):
+        cases.append(
+            Case(
+                id=f"code.case{i}",
+                suite="code",
+                source="manual",
+                difficulty=Difficulty.MEDIO,
+                prompt=f"escreva reverse {i}",
+                gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+                machine_checks=[
+                    MachineCheck(type="not_empty")
+                ],
+            )
+        )
+    suite = Suite(name="code", version=1, cases=cases)
+
+    run = run_many(client, [suite], case_timeout=30.0, workers=3)
+    assert len(run.results) == 6
+    ids = [r.case_id for r in run.results]
+    assert ids == [c.id for c in cases]

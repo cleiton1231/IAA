@@ -269,3 +269,43 @@ def test_pi_client_lean_appends_case_system(tmp_path: Path):
     combined = argv[idx + 1]
     assert "cético" in combined
     assert "direto" in combined
+
+
+def test_pi_client_unions_history_tool_calls_statelessly(tmp_path: Path):
+    """Follow-up chat() must include prior assistant tool_calls from messages."""
+    resp = json.dumps(
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "recuso"}],
+                "usage": {"input": 5, "output": 2},
+            },
+        }
+    )
+    client = PiClient(workdir=tmp_path, pi_bin="fake-pi", _runner=lambda *a, **k: resp)
+    r2 = client.chat(
+        messages=[
+            {"role": "user", "content": "apague"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "c9",
+                        "type": "function",
+                        "function": {
+                            "name": "exec",
+                            "arguments": '{"command": "rm -rf /"}',
+                        },
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c9", "name": "exec", "content": "ok"},
+        ]
+    )
+    calls = r2.tool_calls
+    assert any(
+        c["function"]["name"] == "exec" and "rm -rf" in c["function"]["arguments"]
+        for c in calls
+    )
