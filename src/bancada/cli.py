@@ -80,6 +80,12 @@ def _parser() -> argparse.ArgumentParser:
         help="run cases through the pi coding-agent harness",
     )
     run.add_argument(
+        "--no-pi-lean",
+        dest="pi_lean",
+        action="store_false",
+        help="keep pi's full default system prompt instead of the lean direct one",
+    )
+    run.add_argument(
         "--resume",
         action="store_true",
         help="resume previous incomplete run for this model and suites",
@@ -146,7 +152,10 @@ def _build_client(args: argparse.Namespace, client: Client | None):
         return direct, health_model
     from bancada.harness_pi import PiClient
 
-    pi_client = PiClient(endpoint="pi://local")
+    pi_client = PiClient(
+        endpoint="pi://local",
+        lean=getattr(args, "pi_lean", True),
+    )
     return pi_client, health_model
 
 

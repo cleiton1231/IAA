@@ -48,6 +48,7 @@ nohup python -m bancada.cli run \
   --max-tokens "${BANCADA_MAX_TOKENS:-512}" \
   --temperature "$TEMP" \
   --seed "$SEED" \
+  --harness "${BANCADA_HARNESS:-direct}" \
   >"$LOG" 2>&1 &
 echo $! >"$PIDFILE"
 PID="$(cat "$PIDFILE")"

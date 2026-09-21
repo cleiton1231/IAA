@@ -19,6 +19,15 @@ from bancada.client import ChatError, ChatResult
 
 Runner = Callable[[list[str], float, str], str]
 
+LEAN_SYSTEM_PROMPT = (
+    "Você é um agente de código direto e objetivo. Responda em português. "
+    "Sem preâmbulos, sem repetir a pergunta, sem explicar o que vai fazer: "
+    "se a tarefa pede uma ferramenta, chame-a imediatamente com os argumentos "
+    "corretos; caso contrário, dê a resposta final já no formato pedido. "
+    "Respostas de texto em no máximo 8 linhas. Nunca desista de chamar uma "
+    "ferramenta pedida, mas nunca chame ferramenta que o usuário não pediu."
+)
+
 
 def pi_model_id(model: str | None) -> str | None:
     """Map a bancada model id (gguf path or provider id) to a pi model id."""
@@ -231,6 +240,7 @@ class PiClient:
         max_tool_calls: int = 8,
         endpoint: str = "pi://local",
         llama_endpoint: str = "http://127.0.0.1:8080/v1",
+        lean: bool = False,
         _runner: Runner | None = None,
     ) -> None:
         self.workdir = Path(workdir) if workdir else Path(
@@ -242,6 +252,7 @@ class PiClient:
         self.max_tool_calls = max_tool_calls
         self.endpoint = endpoint
         self.llama_endpoint = llama_endpoint
+        self.lean = lean
         self._runner = _runner
         self._last_tool_calls: list[dict[str, Any]] = []
 
@@ -282,7 +293,14 @@ class PiClient:
         model_id = pi_model_id(model)
         if model_id:
             argv += ["--model", model_id]
-        if system:
+        if self.lean:
+            combined = (
+                LEAN_SYSTEM_PROMPT + f"\n\nInstruções da tarefa:\n{system}"
+                if system
+                else LEAN_SYSTEM_PROMPT
+            )
+            argv += ["--system-prompt", combined]
+        elif system:
             argv += ["--append-system-prompt", system]
         argv += ["-e", str(ext_file), "--", prompt]
 

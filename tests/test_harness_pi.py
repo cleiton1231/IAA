@@ -198,3 +198,74 @@ def test_pi_client_raises_on_missing_output(tmp_path: Path):
     client = PiClient(workdir=tmp_path, pi_bin="fake-pi", _runner=lambda *a, **k: "")
     with pytest.raises(Exception):
         client.chat(messages=[{"role": "user", "content": "oi"}])
+
+
+def test_lean_system_prompt_content():
+    from bancada.harness_pi import LEAN_SYSTEM_PROMPT
+
+    assert "direto" in LEAN_SYSTEM_PROMPT.lower()
+    assert len(LEAN_SYSTEM_PROMPT) < 600
+
+
+def test_pi_client_lean_replaces_system(tmp_path: Path):
+    seen = {}
+
+    def runner(argv, timeout, cwd):
+        seen["argv"] = argv
+        return json.dumps(
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input": 5, "output": 2},
+                },
+            }
+        )
+
+    client = PiClient(
+        workdir=tmp_path,
+        pi_bin="fake-pi",
+        lean=True,
+        _runner=runner,
+    )
+    client.chat(messages=[{"role": "user", "content": "oi"}])
+    argv = seen["argv"]
+    assert "--system-prompt" in argv
+    assert "--append-system-prompt" not in argv
+
+
+def test_pi_client_lean_appends_case_system(tmp_path: Path):
+    seen = {}
+
+    def runner(argv, timeout, cwd):
+        seen["argv"] = argv
+        return json.dumps(
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input": 5, "output": 2},
+                },
+            }
+        )
+
+    client = PiClient(
+        workdir=tmp_path,
+        pi_bin="fake-pi",
+        lean=True,
+        _runner=runner,
+    )
+    client.chat(
+        messages=[
+            {"role": "system", "content": "Você é cético."},
+            {"role": "user", "content": "oi"},
+        ]
+    )
+    argv = seen["argv"]
+    assert "--system-prompt" in argv
+    idx = argv.index("--system-prompt")
+    combined = argv[idx + 1]
+    assert "cético" in combined
+    assert "direto" in combined
