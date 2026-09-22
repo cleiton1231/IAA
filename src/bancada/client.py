@@ -69,10 +69,18 @@ class Client:
         endpoint: str,
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.timeout = timeout
-        self._http = httpx.Client(timeout=timeout, transport=transport)
+        self.model = model
+        self.extra_body = dict(extra_body or {})
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        self._http = httpx.Client(
+            timeout=timeout, transport=transport, headers=headers
+        )
 
     def close(self) -> None:
         self._http.close()
@@ -108,6 +116,8 @@ class Client:
         model_id = first.get("id") if isinstance(first, dict) else None
         if not model_id:
             raise HealthError("no model id in /v1/models")
+        if self.model:
+            return self.model
         return str(model_id)
 
     def chat(
@@ -121,11 +131,14 @@ class Client:
         seed: int | None = None,
     ) -> ChatResult:
         url = f"{self.endpoint}/chat/completions"
-        body: dict[str, Any] = {"messages": messages}
+        body: dict[str, Any] = dict(self.extra_body)
+        body["messages"] = messages
         if tools:
             body["tools"] = tools
         if model:
             body["model"] = model
+        elif self.model:
+            body["model"] = self.model
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
         if temperature is not None:

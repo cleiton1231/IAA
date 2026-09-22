@@ -121,3 +121,40 @@ def test_health_raises_on_connection_error() -> None:
     client = Client("http://127.0.0.1:8080/v1", transport=httpx.MockTransport(handler))
     with pytest.raises(HealthError, match="connect"):
         client.health()
+
+
+def test_client_sends_api_key_and_model_and_extra_body() -> None:
+    import json as _json
+
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "x"}]})
+        captured["auth"] = request.headers.get("authorization")
+        body = _json.loads(request.content)
+        captured["model"] = body.get("model")
+        captured["reasoning"] = body.get("reasoning")
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 7},
+            },
+        )
+
+    from bancada.client import Client
+
+    client = Client(
+        "https://openrouter.ai/api/v1",
+        api_key="sk-or-test",
+        model="prism-ml/ternary-bonsai-2-27b",
+        extra_body={"reasoning": {"enabled": False}},
+        transport=httpx.MockTransport(handler),
+    )
+    assert client.health() == "prism-ml/ternary-bonsai-2-27b"
+    result = client.chat(messages=[{"role": "user", "content": "oi"}])
+    assert result.text == "ok"
+    assert captured["auth"] == "Bearer sk-or-test"
+    assert captured["model"] == "prism-ml/ternary-bonsai-2-27b"
+    assert captured["reasoning"] == {"enabled": False}

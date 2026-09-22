@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -147,7 +148,14 @@ def _parser() -> argparse.ArgumentParser:
 def _client(args: argparse.Namespace, client: Client | None) -> Client:
     if client is not None:
         return client
-    return Client(getattr(args, "endpoint", DEFAULT_ENDPOINT))
+    endpoint = getattr(args, "endpoint", DEFAULT_ENDPOINT)
+    api_key = os.environ.get("BANCADA_API_KEY")
+    model = os.environ.get("BANCADA_MODEL")
+    extra = None
+    raw_extra = os.environ.get("BANCADA_EXTRA_BODY")
+    if raw_extra:
+        extra = json.loads(raw_extra)
+    return Client(endpoint, api_key=api_key, model=model, extra_body=extra)
 
 
 def _build_client(args: argparse.Namespace, client: Client | None):
