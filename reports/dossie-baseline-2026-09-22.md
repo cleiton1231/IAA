@@ -6,7 +6,29 @@ v4 mandado para a API** (provedor retém prompts); histórico local = suítes ma
 
 ---
 
-## 1. API — média e mediana de 3 rodadas (suíte cloud, 20 casos)
+## 0. SUÍTE V4 INTEIRA NA API — prova idêntica aos locais (78 casos, ×3, no-think)
+
+Comparação final apples-to-apples (suítes manuais v4 + HumanEval; conteúdo 100%
+sintético, scan sem dados pessoais):
+
+| Modelo | backend | pass (×3) | **enem (média/mediana)** | HE 12 | tok/s efet. | p50/caso |
+|---|---|---|---|---|---:|---:|
+| **Bonsai-2-27B** | API OpenRouter | 55, 55, 55 | **0,954 / 0,954** | 10×3 | 20,8 | 3,4s |
+| Qwen3.5-9B | **local Vulkan** | — | 0,902 (r7) | 9 | 31 | 2,9s |
+| Qwen3.5-9B | API Venice | 53, 52, 52 | 0,908 / 0,900 | 9×3 | **60,0** | **1,6s** |
+| Qwen3-14B | local Vulkan | — | 0,902 (r7) | 11 | 31 | 2,0s |
+| Gemma-3-12B | API | 46, 46, 46 | **0,800 / 0,800** | 8×3 | 23,0 | 3,7s |
+| Ornith-1.5-9B | local Vulkan | — | 0,763 (r7) | 1 | 31 | 8,0s |
+
+- **Bonsai 27B via API é o MELHOR de todo o baseline** (0,954) — bate todos os
+  locais (recorde local: qwen3.5 0,924) e faz **0,954 idêntico nas 3 rodadas**.
+- **Venice/Qwen3.5 ≈ local Qwen3.5** (0,908 vs 0,902) com **2x a velocidade**.
+- **Gemma acima do Ornith direto** (0,800 vs 0,763) — e abaixo dos tops.
+- Erros: 1 no total em 9 rodadas (retry 429 no client resolveu os rate-limits do gemma).
+
+---
+
+## 1. Suíte cloud (20 casos genéricos) — 3 rodadas por modelo
 
 | Modelo (API) | pass | enem (média / mediana) | HumanEval 12 | tok/s efetivo (média / mediana) |
 |---|---|---|---|---|
@@ -103,17 +125,24 @@ Free tier = inutilizável (429 desde a sonda).
 | Qwen3.5 Venice ($0,10/$0,15) | ~$0,0007 | ~$0,002 |
 | Gemma-3-12B | ~$0,0004–0,001 | ~$0,003 |
 
-## 6. Conclusões
+## 6. Conclusões (atualizadas com a prova v4 idêntica)
 
-1. **Venice/Qwen3.5 é o melhor custo-velocidade do baseline:** 15/20, HE 9/12 (igual ao local Q8),
-   **91 tok/s efetivo** (5x o local, 4x o Bonsai API) a 0,7s de TTFT por ~$0,0007/run.
-2. **Bonsai 27B via API entrega 27B por 9,7/12 no HE** — atrás só do 14B local — mas paga TTFT;
-   rodada 3 variou por rate-limit. Think ON é inutilizável sob caps.
-3. **Gemma-3-12B é o mais fraco dos utilizáveis** (13/20, 8/12 HE) mas determinístico e barato.
-4. **Free tier (qwen3.8-27b:free) não serve** — 429 total.
-5. **Determinismo de API confirmado:** 5 de 7 rodadas idênticas ao dígito com temp 0/seed 42.
-6. **Local segue o topo absoluto no HE** (14B 11/12) e na estabilidade histórica (14B mediana 0,859,
-   Qwen3.5 mediana 0,895), mas a **Venice API approxima o Qwen3.5 local com 5x a velocidade**.
+1. **O Bonsai-2-27B via API é o melhor modelo do baseline inteiro**: enem **0,954**
+   idêntico em 3 rodadas da suíte v4 — recorde anterior (qualquer backend) era 0,924
+   do Qwen3.5 local. 27B > 14B > 9B, e paga só ~$0,004/rodada.
+2. **Qwen3.5 Venice ≈ Qwen3.5 local** (0,908 vs 0,902) com **2x a velocidade**
+   (60 vs 31 tok/s, p50 1,6s vs 2,9s) e ~$0,001/rodada — o melhor custo-velocidade.
+3. **Gemma-3-12B acima do Ornith, abaixo dos tops** (0,800 vs 0,763 direto), mas
+   limitado a rate-limit da Google (429) — precisa de retry sequencial.
+4. **Velocidade:** local domina em TTFT previsível e estável (31 tok/s sempre);
+   APIs: Venice 60, Gemma 23, Bonsai 21 — Bonsai lento mas acima de tudo em qualidade.
+5. **Determinismo de API confirmado na prova grande:** 8 de 9 rodadas sem erro,
+   Bonsai e Gemma **idênticos ao dígito** nas 3 rodadas; Venice variou 1 caso.
+6. **Free tier (qwen3.8-27b:free) não serve** — 429 total desde a sonda.
+7. **Think ON é inutilizável sob os caps** (enem 0,295 no Bonsai) — no-think fixo.
 
-Run IDs — API: bonsai `f53e387e` `8c55180d` `93b5bb9f` · gemma `6f618833` `76c89caa` `9d089eaa` ·
-venice `c934a93e` `11407f92` `f2ff6c51` · free `dec2e2d6` (abort) · think `8b11b809`.
+Run IDs — suíte v4 API: venice `20c8b343` `1922f2a1` `e7de5127` · gemma `a2bf40a0`
+`7f8f8766` `61b9f1da` (pós-retry 429) · bonsai `6e52de86` `ef06d491` `1cf5cdb2`.
+Suíte cloud (ref): bonsai `f53e387e` `8c55180d` `93b5bb9f` · gemma `6f618833` `76c89caa`
+`9d089eaa` · venice `c934a93e` `11407f92` `f2ff6c51` · free `dec2e2d6` (abort) ·
+think `8b11b809`.
