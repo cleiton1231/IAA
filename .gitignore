@@ -9,3 +9,4 @@ data/raw/
 data/*.sqlite
 reports/
 .grok/sdd/
+.env
