@@ -17,6 +17,13 @@ PIDFILE="${DIR}/llama_qwen35_9b_q8.pid"
 
 mkdir -p "$DIR"
 
+# llama-server é um launcher com RUNPATH fixo; o build do humano muda de nome.
+# Descobre a lib dir mais recente (build*/bin) e injeta no LD_LIBRARY_PATH.
+LLAMA_LIBS="$(ls -d "$HOME"/Projetos/llama.cpp/build*/bin 2>/dev/null | head -1)"
+if [ -n "$LLAMA_LIBS" ]; then
+  export LD_LIBRARY_PATH="$LLAMA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
 echo "Iniciando llama-server com Qwen3.5 9B Q8_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
 RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
   --model "$MODEL" \
