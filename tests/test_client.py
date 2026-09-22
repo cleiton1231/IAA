@@ -158,3 +158,26 @@ def test_client_sends_api_key_and_model_and_extra_body() -> None:
     assert captured["auth"] == "Bearer sk-or-test"
     assert captured["model"] == "prism-ml/ternary-bonsai-2-27b"
     assert captured["reasoning"] == {"enabled": False}
+
+
+def test_client_retries_on_429_then_succeeds() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "m"}]})
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            return httpx.Response(429, json={"error": {"message": "rate"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    from bancada.client import Client
+
+    client = Client(
+        "https://api.test/v1",
+        transport=httpx.MockTransport(handler),
+        retry_backoff=0.01,
+    )
+    result = client.chat(messages=[{"role": "user", "content": "oi"}])
+    assert result.text == "ok"
+    assert calls["n"] == 3

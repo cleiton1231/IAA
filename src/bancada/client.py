@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -72,11 +73,15 @@ class Client:
         api_key: str | None = None,
         model: str | None = None,
         extra_body: dict[str, Any] | None = None,
+        retry_backoff: float = 8.0,
+        max_attempts: int = 3,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.timeout = timeout
         self.model = model
         self.extra_body = dict(extra_body or {})
+        self.retry_backoff = retry_backoff
+        self.max_attempts = max_attempts
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
         self._http = httpx.Client(
             timeout=timeout, transport=transport, headers=headers
@@ -146,14 +151,25 @@ class Client:
         if seed is not None:
             body["seed"] = seed
         request_timeout = timeout if timeout is not None else self.timeout
-        try:
-            response = self._http.post(url, json=body, timeout=request_timeout)
-        except httpx.TimeoutException as exc:
-            raise ChatError(f"timeout: {exc}") from exc
-        except httpx.ConnectError as exc:
-            raise ChatError(f"connect failed: {exc}") from exc
-        except httpx.HTTPError as extra:
-            raise ChatError(f"chat request failed: {extra}") from extra
+        response = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                response = self._http.post(url, json=body, timeout=request_timeout)
+            except httpx.TimeoutException as exc:
+                raise ChatError(f"timeout: {exc}") from exc
+            except httpx.ConnectError as exc:
+                raise ChatError(f"connect failed: {exc}") from exc
+            except httpx.HTTPError as extra:
+                raise ChatError(f"chat request failed: {extra}") from extra
+            if (
+                response.status_code in (429, 500, 502, 503)
+                and attempt < self.max_attempts
+            ):
+                if self.retry_backoff > 0:
+                    time.sleep(self.retry_backoff * attempt)
+                continue
+            break
+        assert response is not None
 
         if response.status_code != 200:
             raise ChatError(f"chat HTTP {response.status_code}")
