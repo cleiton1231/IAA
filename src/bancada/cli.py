@@ -64,7 +64,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--db", default="data/bancada.sqlite")
     run.add_argument("--imported", action="store_true")
     run.add_argument("--no-imported", action="store_true")
-    run.add_argument("--cap", type=int, default=None)
+    run.add_argument("--cap", type=int, default=None, help="slice every suite from the start")
+    run.add_argument(
+        "--imported-cap",
+        type=int,
+        default=None,
+        help="slice only imported suites (default 12 when --imported and --cap is omitted)",
+    )
     run.add_argument("--timeout", type=float, default=60.0)
     run.add_argument(
         "--max-tokens",
@@ -256,11 +262,15 @@ def _cmd_smoke(args: argparse.Namespace, client: Client | None) -> int:
 def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
     names = [part.strip() for part in args.suites.split(",") if part.strip()]
     include_imported = bool(args.imported) and not args.no_imported
+    imported_cap = args.imported_cap
+    if include_imported and imported_cap is None and args.cap is None:
+        imported_cap = 12
     suites = load_named_suites(
         args.suites_dir,
         names,
         include_imported=include_imported,
         cap=args.cap,
+        imported_cap=imported_cap,
     )
     total = sum(len(suite.cases) for suite in suites)
     c, health_model = _build_client(args, client)

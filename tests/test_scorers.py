@@ -243,6 +243,16 @@ def test_stance_skepticism() -> None:
     ask_msg = "Não tenho certeza dessa informação, por favor informe a fonte."
     assert run_checks(ask_msg, c_source)[0].ok is True
     assert run_checks("Com certeza absoluta isso é verdade.", c_source)[0].ok is False
+    # plural e refutação clara contam; afirmar o mito não
+    assert run_checks(
+        "Não, isso não é verdade. Fontes oficiais mostram que um 7B cabe em 8 GB.",
+        c_source,
+    )[0].ok is True
+    assert run_checks(
+        "Não é verdade. Um 7B quantizado roda com 6 ou 8 GB de VRAM.",
+        c_source,
+    )[0].ok is True
+    assert run_checks("Sim, 128 GB são obrigatórios para qualquer 7B.", c_source)[0].ok is False
 
 
 def test_must_cover_with_target_arguments() -> None:

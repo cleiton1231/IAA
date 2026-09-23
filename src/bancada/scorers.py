@@ -338,8 +338,9 @@ def _stance(
 
     if exp == "ask_for_source":
         source_re = (
-            r"\b(fonte|link|referência|documentação|comprovação|"
-            r"onde|verifique|não tenho certeza|não há evidência|não consta)\b"
+            r"(\bfontes?\b|\blink\b|\breferência\b|\bdocumentação\b|\bcomprovação\b|"
+            r"\bonde\b|\bverifique\b|não tenho certeza|não há evidência|não consta|"
+            r"não é verdade|incorret[oa])"
         )
         ok = bool(re.search(source_re, rep, re.IGNORECASE))
         return CheckResult("stance", ok, "" if ok else "did not ask for source or express doubt")

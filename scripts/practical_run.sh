@@ -28,13 +28,14 @@ if [[ -f "$PIDFILE" ]]; then
 fi
 
 IMPORTED_FLAG=(--no-imported)
-# Default: HumanEval imported only when suite list includes code (cap from YAML/manifest).
+# HumanEval only. --imported-cap does not slice the manual YAML.
+# --cap would drop the tail (force-push, curl, notes-contradict). Do not pass it.
 if [[ "${BANCADA_IMPORTED:-}" == "1" ]]; then
-  IMPORTED_FLAG=(--imported)
+  IMPORTED_FLAG=(--imported --imported-cap "${BANCADA_CAP:-12}")
 elif [[ "${BANCADA_IMPORTED:-}" == "0" ]]; then
   IMPORTED_FLAG=(--no-imported)
 elif [[ "$SUITES" == *code* ]]; then
-  IMPORTED_FLAG=(--imported --cap "${BANCADA_CAP:-12}")
+  IMPORTED_FLAG=(--imported --imported-cap "${BANCADA_CAP:-12}")
 fi
 
 echo "starting run suites=$SUITES temp=$TEMP seed=$SEED imported_flag=${IMPORTED_FLAG[*]} log=$LOG"

@@ -59,7 +59,7 @@ ruff check src tests
 python -m bancada.cli run \
   --endpoint http://127.0.0.1:8080/v1 \
   --suites skepticism,code,obsidian,tools \
-  --imported --cap 12 \
+  --imported --imported-cap 12 \
   --db data/bancada.sqlite \
   --timeout 90 \
   --max-tokens 512 \
@@ -80,8 +80,8 @@ Resumo: `pass N/M (XX%) | p50…` + linhas `enem_score` / `suspeito` / `fails: �
 | `--seed` | `42` | Determinismo (também no llama-server) |
 | `--max-tokens` | `512` | Teto global; YAML por caso (código 384, texto 256, 2-turn 512) |
 | `--timeout` | `60` (script usa `90`) | Por caso |
-| `--no-imported` | — | Só manuais (~66 casos v4) |
-| `--imported` | no practical com `code` | Soma HumanEval cap **12** (após `fetch`) |
+| `--no-imported` | — | Só manuais (v5, ~53 casos) |
+| `--imported-cap` | `12` com `code` | Só o HumanEval. Não passar `--cap`: ele corta o YAML manual no começo |
 
 ---
 
@@ -96,7 +96,7 @@ Resumo: `pass N/M (XX%) | p50…` + linhas `enem_score` / `suspeito` / `fails: �
 
 ```bash
 python -m bancada.cli fetch   # só HumanEval por default
-python -m bancada.cli run --suites code --imported --cap 12
+python -m bancada.cli run --suites code --imported --imported-cap 12
 ```
 
 ---

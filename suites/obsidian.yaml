@@ -1,4 +1,4 @@
-version: 4
+version: 5
 suite: obsidian
 cases:
   - id: obsidian.limpar-nota
@@ -74,21 +74,6 @@ cases:
       - type: not_empty
       - type: wikilink_allowlist
         allowed: ["Ponteiros"]
-  - id: obsidian.headings
-    source: manual
-    difficulty: facil
-    max_tokens: 384
-    prompt: |
-      Organize com headings ## o dump abaixo. Wikilinks só [[AEDS1]].
-      Responda em no máximo 8 linhas.
-
-      ponteiros, vetores, alocação dinâmica, lista encadeada
-    gabarito:
-      stance: accept_true_control
-    machine_checks:
-      - type: not_empty
-      - type: wikilink_allowlist
-        allowed: ["AEDS1"]
   - id: obsidian.nao-inventar-prova
     source: manual
     difficulty: medio
@@ -158,18 +143,3 @@ cases:
       notes: Não inventar data de prova.
     machine_checks:
       - type: not_empty
-  - id: obsidian.flashcards-2
-    source: manual
-    difficulty: medio
-    max_tokens: 384
-    prompt: |
-      Faça exatamente 2 flashcards (Pergunta/Resposta) e use só um wikilink [[Heap]].
-      Responda em no máximo 8 linhas.
-
-      Heap é memória dinâmica. Stack guarda frames de chamada.
-    gabarito:
-      stance: accept_true_control
-    machine_checks:
-      - type: not_empty
-      - type: wikilink_allowlist
-        allowed: ["Heap"]

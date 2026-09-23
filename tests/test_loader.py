@@ -133,6 +133,55 @@ cases:
     assert len(suites[0].cases) == 2
 
 
+def test_imported_cap_does_not_slice_manual(tmp_path: Path) -> None:
+    manual = tmp_path / "code.yaml"
+    manual.write_text(
+        """
+version: 5
+suite: code
+cases:
+  - id: code.a
+    source: manual
+    difficulty: medio
+    prompt: a
+    gabarito: {stance: accept_true_control}
+  - id: code.b
+    source: manual
+    difficulty: medio
+    prompt: b
+    gabarito: {stance: accept_true_control}
+""",
+        encoding="utf-8",
+    )
+    imported_dir = tmp_path / "imported"
+    imported_dir.mkdir()
+    (imported_dir / "code.yaml").write_text(
+        """
+version: 1
+suite: code
+cases:
+  - id: imported.a
+    source: imported.humaneval
+    difficulty: dificil
+    prompt: a
+    gabarito: {stance: accept_true_control}
+  - id: imported.b
+    source: imported.humaneval
+    difficulty: dificil
+    prompt: b
+    gabarito: {stance: accept_true_control}
+""",
+        encoding="utf-8",
+    )
+    from bancada.loader import load_named_suites
+
+    suites = load_named_suites(
+        tmp_path, ["code"], include_imported=True, cap=None, imported_cap=1
+    )
+    assert [case.id for case in suites[0].cases] == ["code.a", "code.b"]
+    assert [case.id for case in suites[1].cases] == ["imported.a"]
+
+
 def test_invalid_stance_fails(tmp_path: Path) -> None:
     path = tmp_path / "stance.yaml"
     path.write_text(

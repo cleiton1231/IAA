@@ -16,6 +16,7 @@ def load_named_suites(
     names: list[str],
     include_imported: bool = False,
     cap: int | None = None,
+    imported_cap: int | None = None,
 ) -> list[Suite]:
     root = Path(suites_dir)
     suites: list[Suite] = []
@@ -27,7 +28,8 @@ def load_named_suites(
         if include_imported:
             imported = root / "imported" / f"{name}.yaml"
             if imported.exists():
-                suites.append(_apply_cap(load_suite(imported), cap))
+                limit = imported_cap if imported_cap is not None else cap
+                suites.append(_apply_cap(load_suite(imported), limit))
     return suites
 
 

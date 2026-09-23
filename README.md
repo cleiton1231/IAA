@@ -17,7 +17,7 @@ bancada fetch
 # (com `code` na lista, importa HumanEval cap 12; BANCADA_IMPORTED=0 para desligar)
 # ou:
 bancada run --endpoint http://127.0.0.1:8080/v1 \
-  --suites skepticism,code,obsidian,tools --imported --cap 12 \
+  --suites skepticism,code,obsidian,tools --imported --imported-cap 12 \
   --temperature 0 --seed 42 --max-tokens 512
 
 bancada list
@@ -50,7 +50,7 @@ Cache típico `data/raw/`: **~45 KB** com só HumanEval. Teto: **50 MB**.
 |---------|--------|
 | `bancada health` | GET `/v1/models` |
 | `bancada fetch [--only id]` | fontes `enabled` do manifesto |
-| `bancada run --suites a,b [--imported] [--cap N]` | 1 geração por vez |
+| `bancada run --suites a,b [--imported] [--imported-cap N]` | 1 geração por vez; cap só na suíte importada |
 | `bancada export-judge RUN_ID [--full]` | packet compacto + auto JSON |
 | `bancada ingest-scores RUN_ID scores.json` | mescla auto+judge e persiste |
 | `bancada diff A B` | machine_pass + enem + p50 tok/s + juiz |
@@ -59,7 +59,7 @@ Endpoint default: `http://127.0.0.1:8080/v1`. Bind só em localhost.
 
 ## Layout
 
-- `suites/*.yaml` — casos manuais (git), **version 4** (~66 casos)
+- `suites/*.yaml` — casos manuais (git), **version 5** (~53 casos)
 - `suites/imported/` — gerado pelo fetch
 - `data/manifest.yaml` — URLs + sha256 + caps + enabled
 - `JUDGE.md` / `AGENTS.md` — rubrica do juiz OpenCode
