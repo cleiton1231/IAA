@@ -10,6 +10,9 @@ PORT=8080
 HOST="127.0.0.1"
 TEMP="${BANCADA_TEMP:-0}"
 SEED="${BANCADA_SEED:-42}"
+# seed da série (aleatória por série, igual para todos os modelos)
+source "$(dirname "$0")/series_seed.sh" >/dev/null
+SEED="${BANCADA_SEED}"
 CTX="${BANCADA_CTX:-8192}"
 DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_qwen35_9b_q8.log"

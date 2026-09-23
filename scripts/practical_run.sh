@@ -4,11 +4,13 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# seed da série (aleatória por série, igual para todos os modelos)
+source "$(dirname "$0")/series_seed.sh" >/dev/null
 SUITES="${1:-skepticism,code,obsidian,tools}"
 ENDPOINT="${BANCADA_ENDPOINT:-http://127.0.0.1:8080/v1}"
 DB="${BANCADA_DB:-data/bancada.sqlite}"
 TEMP="${BANCADA_TEMP:-0}"
-SEED="${BANCADA_SEED:-42}"
+SEED="${BANCADA_SEED}"
 DIR="${HOME}/.grok/long-running-background-tasks"
 mkdir -p "$DIR" reports data
 LOG="$DIR/bancada_practical_$$.log"
