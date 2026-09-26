@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ternary-Bonsai-2-27B PQ2_0 via binário pré-compilado do fork PrismML (Vulkan).
+# Ternary-Bonsai-2-27B PTQ1_0 via binário pré-compilado do fork PrismML (Vulkan).
 # Não rebuild, não ROCm. Binário separado de /usr/local/bin (mainline Vulkan).
 set -euo pipefail
 
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 "$SCRIPT_DIR/stop_llama.sh"
 
 MODEL="/home/cleiton/local/models/ternary-bonsai-2-27b-ptq1/Ternary-Bonsai-2-27B-PTQ1_0.gguf"
-BIN="/home/cleiton/local/prism-bin/llama-prism-b10685-7dffb15/llama-server"
+BIN="/home/cleiton/ai/prism-b10743/llama-prism-b10743-adfffbe/llama-server"
 PORT=8080
 HOST="127.0.0.1"
 TEMP="${BANCADA_TEMP:-0}"
@@ -23,7 +23,7 @@ PIDFILE="${DIR}/llama_ternary_bonsai_ptq1.pid"
 mkdir -p "$DIR"
 
 echo "Iniciando llama-server (fork PrismML b10685, Vulkan) com Bonsai-2-27B PQ2_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
-export LD_LIBRARY_PATH="/home/cleiton/local/prism-bin/llama-prism-b10685-7dffb15:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="/home/cleiton/ai/prism-b10743/llama-prism-b10743-adfffbe:${LD_LIBRARY_PATH:-}"
 RADV_PERFTEST=nogttspill setsid "$BIN" \
   --model "$MODEL" \
   --host "$HOST" \
@@ -32,6 +32,7 @@ RADV_PERFTEST=nogttspill setsid "$BIN" \
   --ctx-size "$CTX" \
   --jinja \
   --no-repack \
+  --chat-template-kwargs '{"enable_thinking": false}' \
   --temp "$TEMP" \
   --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &
