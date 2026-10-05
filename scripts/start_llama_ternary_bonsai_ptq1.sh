@@ -22,7 +22,7 @@ PIDFILE="${DIR}/llama_ternary_bonsai_ptq1.pid"
 
 mkdir -p "$DIR"
 
-echo "Iniciando llama-server (fork PrismML b10685, Vulkan) com Bonsai-2-27B PQ2_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
+echo "Iniciando llama-server (fork PrismML b10743, Vulkan) com Bonsai-2-27B PTQ1_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
 export LD_LIBRARY_PATH="/home/cleiton/ai/prism-b10743/llama-prism-b10743-adfffbe:${LD_LIBRARY_PATH:-}"
 RADV_PERFTEST=nogttspill setsid "$BIN" \
   --model "$MODEL" \
@@ -32,7 +32,7 @@ RADV_PERFTEST=nogttspill setsid "$BIN" \
   --ctx-size "$CTX" \
   --jinja \
   --no-repack \
-  --chat-template-kwargs '{"enable_thinking": false}' \
+  --reasoning off \
   --temp "$TEMP" \
   --seed "$SEED" \
   < /dev/null > "$LOG" 2>&1 &

@@ -20,13 +20,10 @@ PIDFILE="${DIR}/llama_mimo_v26.pid"
 
 mkdir -p "$DIR"
 
-LLAMA_LIBS="$(ls -d "$HOME"/Projetos/llama.cpp/build*/bin 2>/dev/null | head -1)"
-if [ -n "$LLAMA_LIBS" ]; then
-  export LD_LIBRARY_PATH="$LLAMA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-fi
+LLAMA_BIN="$HOME/Projetos/llama.cpp/build-vulkan-4da633776/bin/llama-server"
 
 echo "Iniciando llama-server com MiMo-V2.6-Distill-Qwen-9B Q8_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
-RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
+RADV_PERFTEST=nogttspill setsid "$LLAMA_BIN" \
   --model "$MODEL" \
   --host "$HOST" \
   --port "$PORT" \

@@ -3,10 +3,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-"$SCRIPT_DIR/stop_llama.sh"
-
 MODEL="/home/cleiton/local/models/ternary-bonsai-2-27b-pq2/Ternary-Bonsai-2-27B-PQ2_0.gguf"
-BIN="/home/cleiton/local/prism-llama.cpp/build/bin/llama-server"
+PRISM_DIR="/home/cleiton/ai/prism-b10743/llama-prism-b10743-adfffbe"
+BIN="$PRISM_DIR/llama-server"
 PORT=8080
 HOST="127.0.0.1"
 TEMP="${BANCADA_TEMP:-0}"
@@ -19,9 +18,20 @@ DIR="${HOME}/.grok/long-running-background-tasks"
 LOG="${DIR}/llama_ternary_bonsai_27b.log"
 PIDFILE="${DIR}/llama_ternary_bonsai_27b.pid"
 
+if [[ ! -r "$MODEL" ]]; then
+  echo "ERRO: modelo não encontrado: $MODEL" >&2
+  exit 1
+fi
+if [[ ! -x "$BIN" ]]; then
+  echo "ERRO: llama-server PrismML não encontrado: $BIN" >&2
+  exit 1
+fi
+
+"$SCRIPT_DIR/stop_llama.sh"
 mkdir -p "$DIR"
 
 echo "Iniciando llama-server (fork PrismML, CPU) com Ternary-Bonsai-2-27B PQ2_0 (ctx=$CTX temp=$TEMP seed=$SEED)..."
+export LD_LIBRARY_PATH="$PRISM_DIR:${LD_LIBRARY_PATH:-}"
 setsid "$BIN" \
   --model "$MODEL" \
   --host "$HOST" \

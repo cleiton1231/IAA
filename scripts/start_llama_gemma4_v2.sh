@@ -20,13 +20,10 @@ PIDFILE="${DIR}/llama_gemma4_v2.pid"
 
 mkdir -p "$DIR"
 
-LLAMA_LIBS="$(ls -d "$HOME"/Projetos/llama.cpp/build*/bin 2>/dev/null | head -1)"
-if [ -n "$LLAMA_LIBS" ]; then
-  export LD_LIBRARY_PATH="$LLAMA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-fi
+LLAMA_BIN="$HOME/Projetos/llama.cpp/build-vulkan-4da633776/bin/llama-server"
 
 echo "Iniciando llama-server com Gemma-4-12B v2 Q6_K (ctx=$CTX temp=$TEMP seed=$SEED)..."
-RADV_PERFTEST=nogttspill setsid /usr/local/bin/llama-server \
+RADV_PERFTEST=nogttspill setsid "$LLAMA_BIN" \
   --model "$MODEL" \
   --host "$HOST" \
   --port "$PORT" \
