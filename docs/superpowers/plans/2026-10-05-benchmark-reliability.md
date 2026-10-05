@@ -1,6 +1,6 @@
 # Confiabilidade da bateria — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Corrigir as cinco falhas reproduzidas sem acrescentar inferências à bateria padrão.
 
@@ -18,7 +18,7 @@
 - Manuais `code`, `tools`, `obsidian` mudam de versão 5 para 6; `skepticism` permanece 5, importada permanece 1.
 - Defaults permitem ler resultados antigos; não reconstruir versões perdidas nem reavaliar respostas históricas.
 - Commit de retorno: `48203b0edbfe6657eb6f881cfa3c02777eeb20f6`; commits separados por correção.
-- Usar checkout existente e agente principal; revisão final Luna, conforme autorização do usuário.
+- Usar checkout existente; workers Luna high/max e revisão final Sol, conforme orientação do usuário.
 
 ## Review Focus
 
