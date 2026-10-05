@@ -45,20 +45,25 @@ def _judge_data(run: Run) -> tuple[float | None, int, dict[str, dict[str, Any]]]
     if not isinstance(cases, list):
         return None, 0, {}
 
-    scores: list[float] = []
+    recorded_ids = {result.case_id for result in run.results}
     by_case: dict[str, dict[str, Any]] = {}
     for item in cases:
         if not isinstance(item, Mapping):
             continue
         case_id = item.get("id")
         score = _finite_number(item.get("score"))
-        if not isinstance(case_id, str) or score is None or not 0 <= score <= 3:
+        if (
+            not isinstance(case_id, str)
+            or case_id not in recorded_ids
+            or score is None
+            or not 0 <= score <= 3
+        ):
             continue
-        scores.append(score)
         entry: dict[str, Any] = {"score": score}
         if isinstance(item.get("auto"), bool):
             entry["auto"] = item["auto"]
         by_case[case_id] = entry
+    scores = [entry["score"] for entry in by_case.values()]
     return (sum(scores) / len(scores) if scores else None, len(scores), by_case)
 
 
@@ -88,16 +93,20 @@ def run_metrics(run: Run) -> dict[str, Any]:
         prompt_time = _finite_number(result.ttft_ms)
         if prompt_time is not None and prompt_time >= 0:
             prompt_times.append(prompt_time)
-        if isinstance(result.prompt_tokens, int) and not isinstance(result.prompt_tokens, bool):
+        if (
+            isinstance(result.prompt_tokens, int)
+            and not isinstance(result.prompt_tokens, bool)
+            and result.prompt_tokens >= 0
+        ):
             prompt_tokens.append(result.prompt_tokens)
         if isinstance(result.completion_tokens, int) and not isinstance(
             result.completion_tokens, bool
-        ):
+        ) and result.completion_tokens >= 0:
             completion_tokens.append(result.completion_tokens)
         if result.error:
             continue
         latency = _finite_number(result.total_ms)
-        if latency is not None and latency >= 0:
+        if "total_ms" in result.model_fields_set and latency is not None and latency >= 0:
             latencies.append(latency)
             time_sum += latency
 
@@ -166,22 +175,26 @@ def _config_warnings(a: Run, b: Run) -> list[dict[str, Any]]:
     for field in _COMPARISON_FIELDS:
         value_a = getattr(a, field)
         value_b = getattr(b, field)
-        missing_a = value_a is None or (field == "suite_versions" and not value_a)
-        missing_b = value_b is None or (field == "suite_versions" and not value_b)
+        compared = (("a", value_a, a), ("b", value_b, b))
+        missing = [
+            name
+            for name, value, run in compared
+            if (
+                field not in run.model_fields_set
+                or value is None
+                or (field == "suite_versions" and not value)
+            )
+        ]
         ambiguous = field == "suite_versions" and (
             _ambiguous_imported_versions(a) or _ambiguous_imported_versions(b)
         )
-        if missing_a or missing_b or value_a != value_b or ambiguous:
+        if missing or value_a != value_b or ambiguous:
             warnings.append(
                 {
                     "field": field,
                     "a": value_a,
                     "b": value_b,
-                    "missing": [
-                        name
-                        for name, value in (("a", value_a), ("b", value_b))
-                        if value is None or (field == "suite_versions" and not value)
-                    ],
+                    "missing": missing,
                     "ambiguous": ambiguous,
                 }
             )

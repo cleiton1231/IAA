@@ -89,7 +89,7 @@ def test_missing_metrics_and_partial_judge() -> None:
 
 
 def test_judge_zero_score_is_valid_and_keeps_auto_flag() -> None:
-    run = _run("zero")
+    run = _run("zero", _result("case"))
     run.judge_scores = {"cases": [{"id": "case", "score": 0, "auto": True}]}
 
     summary = run_metrics(run)
@@ -97,6 +97,85 @@ def test_judge_zero_score_is_valid_and_keeps_auto_flag() -> None:
     assert summary["judge_mean"] == 0
     assert summary["judge_count"] == 1
     assert summary["judge_by_case"]["case"] == {"score": 0, "auto": True}
+
+
+def test_judge_duplicate_ids_count_once_and_last_valid_score_wins() -> None:
+    run = _run("duplicates", _result("x"))
+    run.judge_scores = {
+        "cases": [
+            {"id": "x", "score": 0, "auto": True},
+            {"id": "x", "score": 3, "auto": False},
+            {"id": "outside", "score": 2, "auto": True},
+        ]
+    }
+
+    summary = run_metrics(run)
+
+    assert summary["judge_count"] == 1
+    assert summary["judge_mean"] == 3
+    assert summary["judge_by_case"] == {"x": {"score": 3, "auto": False}}
+
+
+def test_orphan_judgements_do_not_count_toward_coverage() -> None:
+    run = _run("orphan", _result("recorded"))
+    run.judge_scores = {"cases": [{"id": "outside", "score": 3}]}
+
+    summary = run_metrics(run)
+    empty_summary = run_metrics(
+        _run("empty").model_copy(update={"judge_scores": run.judge_scores})
+    )
+
+    assert summary["judge_mean"] is None
+    assert summary["judge_count"] == 0
+    assert summary["judge_by_case"] == {}
+    assert empty_summary["judge_mean"] is None
+    assert empty_summary["judge_count"] == 0
+
+
+def test_negative_token_counts_do_not_count_as_measurements() -> None:
+    run = _run(
+        "tokens",
+        _result("negative", prompt_tokens=-4, completion_tokens=-2),
+        _result("zero", prompt_tokens=0, completion_tokens=0),
+        _result("missing"),
+    )
+
+    summary = run_metrics(run)
+
+    assert summary["prompt_tokens_sum"] == 0
+    assert summary["prompt_tokens_count"] == 1
+    assert summary["completion_tokens_sum"] == 0
+    assert summary["completion_tokens_count"] == 1
+
+
+def test_default_latency_without_payload_field_is_not_measured() -> None:
+    legacy = CaseResult.model_validate(_result("legacy").model_dump(exclude={"total_ms"}))
+    summary = run_metrics(_run("legacy", legacy))
+
+    assert "total_ms" not in legacy.model_fields_set
+    assert summary["latency_p50_ms"] is None
+    assert summary["latency_p95_ms"] is None
+    assert summary["latency_count"] == 0
+    assert summary["time_sum_ms"] == 0
+
+    explicit_zero = run_metrics(_run("zero-latency", _result("zero", total_ms=0)))
+    assert explicit_zero["latency_p50_ms"] == 0
+    assert explicit_zero["latency_count"] == 1
+
+
+def test_comparison_warns_when_harness_is_only_a_default() -> None:
+    a = _run("a", _result("x"))
+    b = _run("b", _result("x"))
+
+    harness_warning = next(
+        warning
+        for warning in compare_runs(a, b)["warnings"]
+        if warning["field"] == "harness"
+    )
+
+    assert "harness" not in a.model_fields_set
+    assert harness_warning["a"] == harness_warning["b"] == "direct"
+    assert harness_warning["missing"] == ["a", "b"]
 
 
 def test_case_passed_requires_checks_and_no_error() -> None:
