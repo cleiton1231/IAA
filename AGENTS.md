@@ -7,6 +7,7 @@ Branch de trabalho: `feat/bancada`. Workspace: este diretório.
 ## Preferências do usuário — GUI local e Superpowers
 
 - Use o plugin **Superpowers** nas tarefas deste projeto, aplicando as skills pertinentes antes de agir. Esta preferência foi registrada a pedido do usuário nesta sessão.
+- Subagentes **Luna** são workers de implementação: esforço **high** por padrão, **max** quando necessário. Revisões e julgamentos são sempre responsabilidade de **Sol**; use **medium** nas revisões simples. Não delegue julgamento a Luna.
 - O usuário autorizou uma GUI em **localhost** para consultar e comparar runs existentes no SQLite e suas estatísticas. Esse pedido amplia o escopo abaixo para incluir essa interface; a primeira versão não inicia benchmarks pelo navegador.
 - Hardware informado: **Radeon RX 9060 XT, 16 GB de VRAM**, geração típica de **~30 tokens/s**. Preserve um orçamento curto para os benchmarks; priorize melhorar a cobertura dos casos existentes e testes automatizados sem inferência antes de aumentar a bateria de prompts.
 - O modelo continua sob responsabilidade do humano. A GUI deve usar apenas loopback, e não iniciar `llama-server` nem ocupar VRAM para inferência.
