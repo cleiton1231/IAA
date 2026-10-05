@@ -75,6 +75,24 @@ def test_corrupt_payload_is_visible(tmp_path):
     assert entry.error
 
 
+@pytest.mark.parametrize("malformed_versions", ["null", "[]", "42", "true"])
+def test_suite_filter_keeps_malformed_suite_metadata_visible(tmp_path, malformed_versions):
+    db = make_db(tmp_path, [make_run()])
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "UPDATE runs SET suite_versions = ? WHERE id = 'a'", (malformed_versions,)
+        )
+
+    unfiltered = read_page(db)
+    assert unfiltered.entries[0].run is None
+    assert unfiltered.entries[0].error
+
+    filtered = read_page(db, suite="skepticism")
+    assert filtered.total == 1
+    assert filtered.entries[0].run is None
+    assert filtered.entries[0].error
+
+
 def test_database_path_uri_characters(tmp_path):
     db = tmp_path / "runs ?#.sqlite"
     from bancada.store import save_run
