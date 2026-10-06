@@ -104,3 +104,29 @@ Independent final verification: 253 tests passed, Ruff/pip check/diff check clea
 A fresh installed wheel exercised six normal HTTP paths, six hostile Host paths,
 and all three saved JSON targets, preserving synthetic DB bytes and reaping its
 owned server. These are local fixture results, not an inference benchmark.
+
+## Final completeness review — 2026-10-06
+
+The additional Sol medium review, with three Luna high investigators, approved
+the source at `ab223155d92e679dbdfe7289c2d44ff01042fe1d`. Findings, dispositions
+and limitations are recorded in [final-review.md](final-review.md).
+
+- Independent full suite: **282 passed in 6.36 s**, no failures or skips.
+  Ruff, pip check, diff check and shell syntax checks passed.
+- Input-field comparison against the pre-GUI checkpoint confirmed unchanged
+  prompts, tool schemas, simulated responses, second-turn prompts and token
+  limits: 53 manual + 12 imported cases, at most 70 calls and 24,064 output tokens.
+  The tighter cron checks use `tools` version 7; old records remain unchanged.
+- Fresh wheel from the approved source:
+  `/tmp/iaa-final-verified-wheel-wscs6xn9/wheelhouse/bancada-0.1.0-py3-none-any.whl`,
+  SHA-256 `791bbf419b196560b99e5a63e20a7c8c80274b3d96d7ff72befe1ea12424893b`.
+  Installed outside the checkout into the existing wheel environment. Identity,
+  legacy ingest, GUI aggregate values, effective endpoint, cron boundaries and
+  previous Host/deep-JSON regressions passed on synthetic fixtures.
+- Chromium checked the affected detail page at desktop and 390-pixel mobile
+  widths, with zero JavaScript errors and no document-width overflow. Both
+  screenshots were visually inspected. Database bytes were preserved; owned
+  servers were terminated and reaped, with ports closed.
+
+No real benchmark, model, GPU or database was used. The unchanged history and
+comparison layouts and earlier memory trial were not repeated in this round.

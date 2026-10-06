@@ -98,6 +98,8 @@ O painel rejeita cabeçalhos `Host` externos; use `localhost` ou `127.0.0.1`.
 SQLite em modo WAL pode criar arquivos auxiliares mesmo em uma conexão somente
 leitura. Resultados e limites da revisão de segurança e memória estão em
 [docs/security-audit.md](docs/security-audit.md).
+Correções e validação da revisão final de GUI, benchmarks e integração estão em
+[docs/final-review.md](docs/final-review.md).
 
 ### Cloud (OpenRouter)
 
