@@ -163,6 +163,7 @@ def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]
     decoder = json.JSONDecoder()
     text = reply or ""
     cursor = 0
+    json_spans: list[tuple[int, int]] = []
     while cursor < len(text):
         if text[cursor] not in "{[":
             cursor += 1
@@ -183,6 +184,7 @@ def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]
             arguments = _argument_object(source.get("arguments"))
             if arguments is not None and field in arguments:
                 values.append(arguments[field])
+        json_spans.append((cursor, end))
         cursor = end
     function_pattern = (
         r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
@@ -194,7 +196,19 @@ def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]
         + re.escape(field)
         + r"[\"']?\s*>(.*?)</parameter>"
     )
-    for function_match in re.finditer(function_pattern, reply or "", re.DOTALL):
+    region_start = 0
+    for span_start, span_end in json_spans:
+        xml_region = text[region_start:span_start]
+        for function_match in re.finditer(function_pattern, xml_region, re.DOTALL):
+            values.extend(
+                parameter_match.group(1).strip()
+                for parameter_match in re.finditer(
+                    parameter_pattern, function_match.group(1), re.DOTALL
+                )
+            )
+        region_start = span_end
+    xml_region = text[region_start:]
+    for function_match in re.finditer(function_pattern, xml_region, re.DOTALL):
         values.extend(
             parameter_match.group(1).strip()
             for parameter_match in re.finditer(

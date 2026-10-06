@@ -632,6 +632,65 @@ def test_loaded_cron_text_fallback_keeps_direct_wrappers_and_surrounding_text() 
         assert all(result.ok for result in run_checks(reply, case.machine_checks, tool_calls=[]))
 
 
+def test_loaded_cron_xml_fallback_ignores_decoded_json_spans() -> None:
+    import json
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    xml_cron = (
+        "<function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+        "<parameter=message>Revisar ponteiros</parameter></function>"
+    )
+    outer_exec = (
+        '{"name":"exec","arguments":{"message":'
+        + json.dumps(xml_cron)
+        + "}}"
+    )
+    outer_cron = (
+        '{"name":"cron","arguments":{"at":"tomorrow 09:00",'
+        '"message":'
+        + json.dumps(xml_cron)
+        + "}}"
+    )
+    function_wrapper = (
+        '{"function":{"name":"exec","arguments":{"payload":'
+        + json.dumps(xml_cron)
+        + "}}}"
+    )
+    array = (
+        '[{"name":"exec","arguments":{"message":'
+        + json.dumps(xml_cron)
+        + "}}]"
+    )
+
+    for reply in (outer_exec, outer_cron, function_wrapper, array):
+        assert not run_checks(reply, case.machine_checks, tool_calls=[])[1].ok
+
+
+def test_loaded_cron_xml_fallback_still_accepts_xml_outside_json_spans() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    xml_cron = (
+        "<function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+        "<parameter=message>Revisar ponteiros</parameter></function>"
+    )
+    unrelated_json = '{"name":"exec","arguments":{"command":"ls"}}'
+
+    for reply in (
+        xml_cron,
+        "Resposta: " + unrelated_json + " " + xml_cron,
+        xml_cron + " " + unrelated_json,
+    ):
+        assert all(result.ok for result in run_checks(reply, case.machine_checks, tool_calls=[]))
+
+
 def test_must_cover_tmp_glob_satisfies_tmp_filenames() -> None:
     checks = [
         MachineCheck(type="must_cover", pattern="cache_01.tmp", target="arguments"),
