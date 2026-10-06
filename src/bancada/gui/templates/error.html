@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Bancada{% endblock %}
+{% block content %}<section class="error-state panel" aria-labelledby="error-title"><span class="error-code">{{ status }}</span><p class="eyebrow">NÃO FOI POSSÍVEL ABRIR ESTA TELA</p><h1 id="error-title">{{ title }}</h1><p>{{ message }}</p><a class="button button-primary" href="{{ url_for('history') }}">Voltar ao histórico</a></section>{% endblock %}

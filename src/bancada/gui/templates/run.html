@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ run.id }} · Bancada{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Caminho"><a href="{{ url_for('history') }}">Histórico</a><span aria-hidden="true">/</span><span>Detalhe do run</span></nav>
+<section class="page-intro run-intro"><p class="eyebrow">DETALHE DO RUN</p><div class="title-with-action"><div><h1>{{ run.model_id }}</h1><p class="run-full-id"><code>{{ run.id }}</code></p></div><button class="button button-quiet copy-button" type="button" data-copy-run-id="{{ run.id }}">Copiar ID</button></div><p>Timestamp gravado: {{ entry.created_at|timestamp }} · {{ metrics.total }} casos registrados</p><p class="copy-status" aria-live="polite"></p></section>
+
+<section class="metric-grid" aria-label="Resumo estatístico">
+  <article class="metric-card metric-primary"><span class="metric-label">Aprovação automática</span><strong>{{ metrics.machine_rate|percent }}</strong><span>{{ metrics.passed }}/{{ metrics.total }} casos registrados</span></article>
+  <article class="metric-card"><span class="metric-label">ENEM</span><strong>{{ metrics.enem.enem_score|number(2) }}</strong><span>{{ metrics.enem.enem_earned|number(1) }} de {{ metrics.enem.enem_max|number(1) }} pontos</span></article>
+  <article class="metric-card"><span class="metric-label">Nota média do juiz</span><strong>{% if metrics.judge_mean is none %}—{% else %}{{ metrics.judge_mean|number(2) }}/3{% endif %}</strong><span>{{ metrics.judge_count }} casos com nota registrada</span></article>
+  <article class="metric-card"><span class="metric-label">Velocidade p50</span><strong>{% if metrics.tps_p50 is none %}—{% else %}{{ metrics.tps_p50|number }}{% endif %}</strong><span>tokens/s · {{ metrics.tps_count }} amostras</span></article>
+</section>
+
+<section class="panel" aria-labelledby="quality-title"><div class="section-heading"><div><p class="eyebrow">COBERTURA E QUALIDADE</p><h2 id="quality-title">Resultados deste run</h2></div><span class="muted">Métricas ausentes ficam indisponíveis; não viram zero.</span></div>
+  <div class="stat-strip">
+    <div><span>Latência por caso p50 / p95</span><strong>{{ metrics.latency_p50_ms|number }} / {{ metrics.latency_p95_ms|number }} ms</strong><small>{{ metrics.latency_count }} amostras sem erro</small></div>
+    <div><span>Tempo acumulado dos casos</span><strong>{% if metrics.latency_count %}{{ (metrics.time_sum_ms / 1000)|number }} s{% else %}indisponível{% endif %}</strong><small>Soma por caso; não é duração real com workers paralelos.</small></div>
+    <div><span>Tokens registrados</span><strong>{{ metrics.prompt_tokens_sum }} entrada · {{ metrics.completion_tokens_sum }} saída</strong><small>{{ metrics.prompt_tokens_count }}/{{ metrics.total }} e {{ metrics.completion_tokens_count }}/{{ metrics.total }} casos com contagem</small></div>
+    <div><span>Processamento do prompt p50</span><strong>{{ metrics.prompt_processing_p50_ms|number }} ms</strong><small>{{ metrics.prompt_processing_count }} amostras do campo legado prompt_ms</small></div>
+  </div><p class="note-line">Em casos de dois turnos, tokens somam os turnos, enquanto tokens/s representa o segundo turno. “Processamento do prompt” não é TTFT verdadeiro.</p>
+</section>
+
+<div class="two-column">
+  <section class="panel" aria-labelledby="category-title"><div class="section-heading"><div><p class="eyebrow">DISTRIBUIÇÃO</p><h2 id="category-title">Aprovação por categoria</h2></div></div>
+    {% if metrics.categories %}<div class="bar-chart" role="img" aria-label="Barras de aprovação automática por categoria">{% for name, group in metrics.categories.items() %}<div class="bar-row"><div class="bar-label"><span>{{ name }}</span><strong>{{ group.rate|percent }} <small>{{ group.passed }}/{{ group.total }}</small></strong></div><div class="bar-track"><span class="bar-fill" style="width: {{ (group.rate or 0) * 100 }}%"></span></div></div>{% endfor %}</div>
+      <div class="table-wrap compact-table"><table><caption>Valores do gráfico por categoria</caption><thead><tr><th scope="col">Categoria</th><th scope="col">Aprovados</th><th scope="col">Total</th><th scope="col">Taxa</th></tr></thead><tbody>{% for name, group in metrics.categories.items() %}<tr><th scope="row">{{ name }}</th><td>{{ group.passed }}</td><td>{{ group.total }}</td><td>{{ group.rate|percent }}</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="empty-inline">Este run não tem casos registrados.</p>{% endif %}
+    <details class="method-note"><summary>Como ler estas taxas</summary><p>A aprovação automática exige ao menos um check, todos os checks aprovados e nenhum erro no run. Um check de formato aprovado não prova qualidade semântica.</p></details>
+  </section>
+  <section class="panel" aria-labelledby="fail-title"><div class="section-heading"><div><p class="eyebrow">DIAGNÓSTICO</p><h2 id="fail-title">Motivos de falha</h2></div></div>
+    {% if metrics.fail_reasons %}<div class="table-wrap compact-table"><table><caption>Contagem de motivos reportados</caption><thead><tr><th scope="col">Motivo</th><th scope="col">Casos</th></tr></thead><tbody>{% for reason, count in metrics.fail_reasons.items() %}<tr><th scope="row">{{ reason }}</th><td>{{ count }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-inline">Nenhum motivo de falha foi registrado.</p>{% endif %}
+    <details class="method-note"><summary>Sobre ENEM, risco e utilidade</summary><p>ENEM, risco e utilidade preservam os cálculos existentes da Bancada. Aqui, risco é uma taxa de aprovação das categorias correspondentes; categorias ausentes contribuem zero para utilidade.</p></details>
+  </section>
+</div>
+
+<section class="panel" aria-labelledby="config-title"><div class="section-heading"><div><p class="eyebrow">METADADOS GRAVADOS</p><h2 id="config-title">Configurações registradas</h2></div></div><div class="table-wrap compact-table"><table><caption>Configuração salva para este run; campos ausentes são identificados como não registrados.</caption><tbody>{% for item in configuration %}<tr><th scope="row">{{ item.label }}</th><td>{{ item.value }}</td></tr>{% endfor %}</tbody></table></div></section>
+
+<section class="panel case-panel" aria-labelledby="case-title"><div class="section-heading"><div><p class="eyebrow">INSPEÇÃO DOS CASOS</p><h2 id="case-title">Casos registrados</h2></div><span class="muted">{{ cases|length }} exibidos · {{ metrics.total }} no run</span></div>
+  <form class="filter-grid case-filters" method="get" action="{{ url_for('run_detail', run_id=run.id) }}">
+    <div class="field"><label for="case-suite">Suíte</label><input id="case-suite" type="search" name="suite" value="{{ suite }}" placeholder="Nome exato"></div>
+    <div class="field"><label for="case-outcome">Resultado automático</label><select id="case-outcome" name="outcome"><option value="all"{% if outcome == 'all' %} selected{% endif %}>Todos</option><option value="pass"{% if outcome == 'pass' %} selected{% endif %}>Aprovados</option><option value="fail"{% if outcome == 'fail' %} selected{% endif %}>Reprovados</option></select></div>
+    <div class="field"><label for="case-sort">Ordenação</label><select id="case-sort" name="sort"><option value="sequence"{% if sort == 'sequence' %} selected{% endif %}>Ordem registrada</option><option value="latency_desc"{% if sort == 'latency_desc' %} selected{% endif %}>Maior latência primeiro</option></select></div>
+    <div class="filter-actions"><button class="button button-primary" type="submit">Atualizar lista</button><a class="button button-quiet" href="{{ url_for('run_detail', run_id=run.id) }}">Limpar</a></div>
+  </form>
+  {% if cases %}
+    <div class="table-wrap"><table><caption>Abra cada caso para consultar prompt, resposta, tools e verificações.</caption><thead><tr><th scope="col">Caso</th><th scope="col">Suíte</th><th scope="col">Categoria</th><th scope="col">Resultado</th><th scope="col">Latência</th><th scope="col">Juiz</th></tr></thead><tbody>
+      {% for item in cases %}{% set result = item.result %}<tr><th scope="row"><a href="#caso-{{ loop.index }}">{{ result.case_id }}</a></th><td>{{ result.suite }}</td><td>{{ result.category or '—' }}</td><td><span class="status-pill{% if not item.passed %} status-fail{% endif %}">{% if item.passed %}Aprovado{% else %}Reprovado{% endif %}</span></td><td>{% if item.latency is none %}indisponível{% else %}{{ item.latency|number }} ms{% endif %}</td><td>{% if item.judge %}{{ item.judge.score|number(2) }}/3{% if item.judge.auto is defined %} <span class="subvalue">{% if item.judge.auto %}automática{% else %}humana{% endif %}</span>{% endif %}{% else %}<span class="muted">sem nota</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="case-details-list">{% for item in cases %}{% set result = item.result %}<details class="case-detail" id="caso-{{ loop.index }}"><summary><span>{{ result.case_id }}</span><span class="muted">{{ result.suite }} · {{ result.category or 'sem categoria' }}</span></summary>
+      <div class="case-content"><div class="case-block"><h3>Prompt</h3><pre class="text-block">{{ item.details.prompt }}</pre></div>
+        {% if item.details.turn1_reply %}<div class="case-block"><h3>Resposta do primeiro turno</h3><pre class="text-block">{{ item.details.turn1_reply }}</pre></div>{% endif %}
+        {% if item.details.turn1_tool_calls != '[]' %}<div class="case-block"><h3>Tools do primeiro turno</h3><pre class="text-block">{{ item.details.turn1_tool_calls }}</pre></div>{% endif %}
+        <div class="case-block"><h3>Resposta</h3><pre class="text-block">{{ item.details.reply }}</pre></div>
+        {% if item.details.tool_calls != '[]' %}<div class="case-block"><h3>Chamadas de ferramentas</h3><pre class="text-block">{{ item.details.tool_calls }}</pre></div>{% endif %}
+        <div class="case-block"><h3>Verificações automáticas</h3>{% if result.checks %}<ul class="check-list">{% for check in result.checks %}<li><span class="status-pill{% if not check.ok %} status-fail{% endif %}">{% if check.ok %}aprovado{% else %}reprovado{% endif %}</span><strong>{{ check.type }}{% if check.source %} · {{ check.source }}{% endif %}</strong>{% if check.reason %}<span>{{ check.reason }}</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p class="muted">Nenhuma verificação registrada.</p>{% endif %}</div>
+        {% if item.judge_reason %}<div class="case-block"><h3>Justificativa do juiz</h3><pre class="text-block">{{ item.judge_reason }}</pre></div>{% endif %}
+        {% if result.error %}<div class="callout callout-error"><strong>Erro registrado</strong><p>{{ result.error }}</p></div>{% endif %}
+      </div></details>{% endfor %}</div>
+  {% else %}<p class="empty-inline">Nenhum caso corresponde aos filtros selecionados.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}Bancada local{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='gui.js') }}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="{{ url_for('history') }}" aria-label="Bancada, histórico">
+        <span class="brand-mark" aria-hidden="true">B</span>
+        <span><strong>Bancada</strong><small>consulta local</small></span>
+      </a>
+      <nav aria-label="Navegação principal"><a href="{{ url_for('history') }}">Histórico</a></nav>
+      <span class="local-badge"><span aria-hidden="true"></span> Somente neste computador</span>
+    </div>
+  </header>
+  <main class="shell page-shell" id="conteudo">{% block content %}{% endblock %}</main>
+  <footer class="shell site-footer"><span>Bancada local · leitura do SQLite</span><span>O conteúdo gerado aparece como texto.</span></footer>
+</body>
+</html>

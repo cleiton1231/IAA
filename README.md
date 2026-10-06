@@ -60,6 +60,21 @@ Cache típico `data/raw/`: **~45 KB** com só HumanEval. Teto: **50 MB**.
 
 Endpoint default: `http://127.0.0.1:8080/v1`. Bind só em localhost.
 
+### Painel local de runs
+
+Instale a interface opcional e inicie o servidor somente para consulta:
+
+```bash
+pip install -e '.[dev,gui]'
+bancada gui --db data/bancada.sqlite --port 8765
+```
+
+Abra `http://127.0.0.1:8765` no navegador e encerre com `Ctrl+C`. A interface
+usa apenas loopback, lê o SQLite sem migrações e não executa modelos. O histórico
+permite filtrar e paginar runs; os detalhes mostram métricas e casos; a comparação
+alinha resultados pelo ID do caso e deixa visíveis diferenças de configuração e
+denominadores. O extra `gui` não é necessário para os demais comandos da CLI.
+
 ### Cloud (OpenRouter)
 
 O client aceita endpoints API: `BANCADA_ENDPOINT`/`--endpoint` apontando para o provedor, `BANCADA_API_KEY` (chave via env, nunca comitada), `BANCADA_MODEL` e `BANCADA_EXTRA_BODY` (ex.: `{"reasoning":{"exclude":true}}` para no-think). Retry com backoff em 429/5xx embutido. Os provedores podem **ignorar seed** — runs via API não são comparáveis ao local dígito a dígito.

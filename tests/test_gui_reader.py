@@ -121,3 +121,41 @@ def test_missing_judge_table_means_no_judgment(tmp_path):
             "INSERT INTO runs VALUES ('old', 'model-a', 'local', '{}', 42, 1)"
         )
     assert read_run(db, "old").run.judge_scores is None
+
+
+def test_reader_preserves_harness_provenance_for_legacy_and_recorded_values(tmp_path):
+    db = make_db(tmp_path, [make_run("legacy"), make_run("direct")])
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE runs SET harness = NULL WHERE id = 'legacy'")
+        conn.execute("UPDATE runs SET harness = 'direct' WHERE id = 'direct'")
+
+    legacy = read_run(db, "legacy").run
+    direct = read_run(db, "direct").run
+    page = read_page(db)
+    legacy_from_page = next(entry.run for entry in page.entries if entry.id == "legacy")
+
+    assert legacy.harness == "direct"
+    assert "harness" not in legacy.model_fields_set
+    assert "harness" not in legacy_from_page.model_fields_set
+    assert direct.harness == "direct"
+    assert "harness" in direct.model_fields_set
+
+
+def test_reader_omits_harness_when_legacy_schema_has_no_column(tmp_path):
+    db = tmp_path / "old-harness.sqlite"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE runs (id TEXT PRIMARY KEY, model_id TEXT, endpoint TEXT, "
+            "suite_versions TEXT, created_at INTEGER)"
+        )
+        conn.execute("CREATE TABLE case_results (run_id TEXT, seq INTEGER, payload TEXT)")
+        conn.execute(
+            "INSERT INTO runs VALUES ('old', 'model-a', 'local', '{}', 1)"
+        )
+
+    entry = read_run(db, "old")
+    page_entry = read_page(db).entries[0]
+
+    assert entry.run.harness == "direct"
+    assert "harness" not in entry.run.model_fields_set
+    assert "harness" not in page_entry.run.model_fields_set

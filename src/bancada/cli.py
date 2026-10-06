@@ -148,6 +148,11 @@ def _parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list")
     listing.add_argument("--db", default="data/bancada.sqlite")
     listing.set_defaults(func=_cmd_list)
+
+    gui = sub.add_parser("gui", help="open the local read-only run dashboard")
+    gui.add_argument("--db", default="data/bancada.sqlite")
+    gui.add_argument("--port", type=int, default=8765)
+    gui.set_defaults(func=_cmd_gui)
     return parser
 
 
@@ -427,6 +432,25 @@ def _cmd_list(args: argparse.Namespace, client: Client | None) -> int:
     del client
     for run in list_runs(Path(args.db)):
         print(_format_run_line(run))
+    return 0
+
+
+def _cmd_gui(args: argparse.Namespace, client: Client | None) -> int:
+    del client
+    if not 1 <= args.port <= 65535:
+        raise ValueError("porta deve estar entre 1 e 65535")
+    db_path = Path(args.db).expanduser().resolve()
+    try:
+        from bancada.gui.app import serve
+    except ModuleNotFoundError as exc:
+        if exc.name == "flask":
+            print(
+                "A interface requer o extra opcional; instale com pip install -e '.[gui]'.",
+                file=sys.stderr,
+            )
+            return 1
+        raise
+    serve(db_path, port=args.port)
     return 0
 
 

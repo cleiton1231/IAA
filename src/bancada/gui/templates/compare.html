@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Comparação de runs · Bancada{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Caminho"><a href="{{ url_for('history') }}">Histórico</a><span aria-hidden="true">/</span><span>Comparação</span></nav>
+<section class="page-intro"><p class="eyebrow">COMPARAÇÃO PELO ID DO CASO</p><h1>Dois runs lado a lado</h1><p>Casos ausentes ficam separados e não contam como reprovação.</p></section>
+{% if comparison.warnings %}
+  <aside class="callout callout-warning" aria-labelledby="warning-title"><h2 id="warning-title">Comparabilidade não verificada</h2><p>Esta é uma comparação exploratória; diferenças ou metadados ausentes impedem tratá-la como controlada.</p>
+    <div class="table-wrap compact-table"><table><caption>Configurações diferentes, ausentes ou ambíguas</caption><thead><tr><th scope="col">Campo</th><th scope="col">Run A</th><th scope="col">Run B</th><th scope="col">Observação</th></tr></thead><tbody>
+      {% for warning in comparison.warnings %}<tr><th scope="row">{{ config_labels.get(warning.field, warning.field) }}</th><td>{{ warning.a if warning.a is not none else 'não registrado' }}</td><td>{{ warning.b if warning.b is not none else 'não registrado' }}</td><td>{% if warning.missing %}ausente em {{ warning.missing|join(' e ') }}{% endif %}{% if warning.ambiguous %}{% if warning.missing %}; {% endif %}versão histórica ambígua{% endif %}{% if not warning.missing and warning.a != warning.b %}valores diferentes{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </aside>
+{% else %}<aside class="callout callout-info"><strong>Configurações comparáveis</strong><p>Os campos registrados considerados pela GUI coincidem. Isso não substitui uma análise do conteúdo e da execução.</p></aside>{% endif %}
+<section class="compare-cards" aria-label="Identificação dos runs">
+  <article class="run-compare-card"><p class="eyebrow">RUN A</p><h2>{{ run_a.model_id }}</h2><code>{{ run_a.id }}</code><p>{{ metrics_a.passed }}/{{ metrics_a.total }} casos passaram · {{ metrics_a.machine_rate|percent }}</p><a href="{{ url_for('run_detail', run_id=run_a.id) }}">Abrir detalhe →</a></article>
+  <article class="run-compare-card"><p class="eyebrow">RUN B</p><h2>{{ run_b.model_id }}</h2><code>{{ run_b.id }}</code><p>{{ metrics_b.passed }}/{{ metrics_b.total }} casos passaram · {{ metrics_b.machine_rate|percent }}</p><a href="{{ url_for('run_detail', run_id=run_b.id) }}">Abrir detalhe →</a></article>
+</section>
+<section class="panel" aria-labelledby="common-title"><div class="section-heading"><div><p class="eyebrow">MESMO DENOMINADOR</p><h2 id="common-title">Casos em comum</h2></div><span class="muted">{{ comparison.common_total }} IDs compartilhados</span></div>
+  <div class="stat-strip common-stats"><div><span>Run A nos casos em comum</span><strong>{{ comparison.common_pass_a }}/{{ comparison.common_total }} · {{ comparison.common_rate_a|percent }}</strong></div><div><span>Run B nos casos em comum</span><strong>{{ comparison.common_pass_b }}/{{ comparison.common_total }} · {{ comparison.common_rate_b|percent }}</strong></div><div><span>Presentes só em A</span><strong>{{ comparison.only_a|length }}</strong></div><div><span>Presentes só em B</span><strong>{{ comparison.only_b|length }}</strong></div></div>
+  {% if comparison.rows %}<div class="table-wrap"><table><caption>Resultado automático por ID compartilhado</caption><thead><tr><th scope="col">Caso</th><th scope="col">Run A</th><th scope="col">Run B</th><th scope="col">Leitura</th></tr></thead><tbody>{% for row in comparison.rows %}<tr><th scope="row">{{ row.case_id }}</th><td>{% if row.pass_a %}Aprovado{% else %}Reprovado{% endif %}</td><td>{% if row.pass_b %}Aprovado{% else %}Reprovado{% endif %}</td><td><span class="status-pill status-{{ row.status }}">{% if row.status == 'maintained' %}Mantido{% elif row.status == 'regression' %}Regressão{% elif row.status == 'improvement' %}Melhoria{% else %}Reprovado nos dois{% endif %}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-inline">Não há IDs de caso compartilhados. As taxas comuns ficam indisponíveis.</p>{% endif %}
+</section>
+<div class="two-column">
+  <section class="panel"><div class="section-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h2>Metadados lado a lado</h2></div></div><div class="table-wrap compact-table"><table><thead><tr><th scope="col">Campo</th><th scope="col">Run A</th><th scope="col">Run B</th></tr></thead><tbody>{% for index in range(configuration_a|length) %}<tr><th scope="row">{{ configuration_a[index].label }}</th><td>{{ configuration_a[index].value }}</td><td>{{ configuration_b[index].value }}</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="panel"><div class="section-heading"><div><p class="eyebrow">CASOS EXCLUSIVOS</p><h2>O que não entrou na taxa comum</h2></div></div><div class="exclusive-list">
+    <div><h3>Só em A <span>{{ comparison.only_a|length }}</span></h3>{% if comparison.only_a %}<ul>{% for case_id in comparison.only_a %}<li>{{ case_id }}</li>{% endfor %}</ul>{% else %}<p class="muted">Nenhum.</p>{% endif %}</div>
+    <div><h3>Só em B <span>{{ comparison.only_b|length }}</span></h3>{% if comparison.only_b %}<ul>{% for case_id in comparison.only_b %}<li>{{ case_id }}</li>{% endfor %}</ul>{% else %}<p class="muted">Nenhum.</p>{% endif %}</div>
+  </div><details class="method-note"><summary>Denominadores individuais</summary><p>A taxa de cada cartão usa todos os casos registrados naquele run. A taxa comum usa apenas {{ comparison.common_total }} IDs presentes nos dois. Casos exclusivos aparecem ao lado e não são tratados como falhas.</p></details></section>
+</div>
+{% endblock %}

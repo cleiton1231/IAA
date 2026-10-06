@@ -140,19 +140,21 @@ def _entry(
                 if score_row is not None:
                     scores = json.loads(score_row[0])
         versions = metadata.get("suite_versions")
-        run = Run(
-            id=entry.id,
-            model_id=entry.model_id,
-            endpoint=metadata.get("endpoint") or "",
-            suite_versions=json.loads(versions) if versions else {},
-            results=results,
-            judge_scores=scores,
-            max_tokens=metadata.get("max_tokens"),
-            timeout=metadata.get("timeout"),
-            temperature=metadata.get("temperature"),
-            seed=metadata.get("seed"),
-            harness=metadata.get("harness") or "direct",
-        )
+        run_data: dict[str, Any] = {
+            "id": entry.id,
+            "model_id": entry.model_id,
+            "endpoint": metadata.get("endpoint") or "",
+            "suite_versions": json.loads(versions) if versions else {},
+            "results": results,
+            "judge_scores": scores,
+            "max_tokens": metadata.get("max_tokens"),
+            "timeout": metadata.get("timeout"),
+            "temperature": metadata.get("temperature"),
+            "seed": metadata.get("seed"),
+        }
+        if metadata.get("harness") is not None:
+            run_data["harness"] = metadata["harness"]
+        run = Run(**run_data)
         entry.run = run
         return entry
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
