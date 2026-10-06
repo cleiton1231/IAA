@@ -19,6 +19,11 @@ _PAGE_SIZE = 25
 _PORT_MIN = 1
 _PORT_MAX = 65535
 _TIME_ZONE = ZoneInfo("America/Sao_Paulo")
+_DIFFICULTY_LABELS = {
+    "facil": "Fácil",
+    "medio": "Médio",
+    "dificil": "Difícil",
+}
 _CONFIG_LABELS = {
     "seed": "seed",
     "suite_versions": "versões das suítes",
@@ -231,6 +236,15 @@ def create_app(db_path: Path) -> Flask:
         points, speed_min, speed_max = _quality_speed_points(entries)
         page_count = max(1, math.ceil(page.total / _PAGE_SIZE))
         compare_choices = [item["entry"] for item in entries if item.get("metrics")]
+        empty_state = (
+            "filters"
+            if page.total == 0 and (model or suite or seed_text)
+            else "page"
+            if page.total and page_number > page_count
+            else "database"
+            if page.total == 0
+            else ""
+        )
         return render_template(
             "index.html",
             entries=entries,
@@ -239,6 +253,7 @@ def create_app(db_path: Path) -> Flask:
             speed_max=speed_max,
             page=page,
             page_count=page_count,
+            empty_state=empty_state,
             model=model,
             suite=suite,
             seed=seed_text,
@@ -307,6 +322,7 @@ def create_app(db_path: Path) -> Flask:
             run=run,
             metrics=metrics,
             configuration=_run_configuration(run),
+            difficulty_labels=_DIFFICULTY_LABELS,
             cases=selected,
             suite=suite_filter,
             outcome=outcome,
@@ -361,7 +377,7 @@ def create_app(db_path: Path) -> Flask:
 
     @app.errorhandler(404)
     def page_not_found(_error: Any):
-        return _error_page("Página não encontrada", "O endereço solicitado não existe.", 404)
+        return _error_page("Página não encontrada", "O endereço solicitado não existe.", 404), 404
 
     return app
 

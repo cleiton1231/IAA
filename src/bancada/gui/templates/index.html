@@ -62,6 +62,12 @@
     </nav>
   </section>
 {% else %}
-  <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">◷</span><p class="eyebrow">HISTÓRICO VAZIO</p><h2 id="empty-title">Nenhum run registrado</h2><p>Quando a Bancada gravar uma avaliação, ela aparecerá aqui. Este painel não executa modelos.</p></section>
+  {% if empty_state == 'filters' %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">⌕</span><p class="eyebrow">SEM RESULTADOS</p><h2 id="empty-title">Nenhum run corresponde aos filtros</h2><p>O histórico tem runs, mas nenhum corresponde à busca atual. Remova ou ajuste os filtros.</p><a class="button button-primary" href="{{ url_for('history') }}">Limpar filtros</a></section>
+  {% elif empty_state == 'page' %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">↗</span><p class="eyebrow">FIM DO HISTÓRICO</p><h2 id="empty-title">Nenhum run nesta página</h2><p>Você está além da última página. Há {{ page.total }} runs que correspondem aos filtros.</p><a class="button button-primary" href="{{ url_for('history', page=page_count, model=model or none, suite=suite or none, seed=seed or none) }}">Ir à última página</a></section>
+  {% else %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">◷</span><p class="eyebrow">HISTÓRICO VAZIO</p><h2 id="empty-title">Nenhum run registrado</h2><p>Quando a Bancada gravar uma avaliação, ela aparecerá aqui. Este painel não executa modelos.</p></section>
+  {% endif %}
 {% endif %}
 {% endblock %}

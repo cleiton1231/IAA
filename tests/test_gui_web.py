@@ -95,12 +95,41 @@ def test_detail_filters_outcomes_and_sorts_latency(tmp_path):
     run.results[1].total_ms = 20.0
     client = gui_app.create_app(make_db(tmp_path, [run])).test_client()
 
-    response = client.get("/runs/a?suite=skepticism&outcome=fail&sort=latency_desc")
+    response = client.get("/runs/a?suite=skepticism&outcome=all&sort=latency_desc")
 
     assert response.status_code == 200
+    assert b"lento" in response.data
     assert b"rapido" in response.data
-    assert b"lento" not in response.data
+    assert response.data.index(b">lento</a>") < response.data.index(b">rapido</a>")
     assert b"latency_desc" in response.data
+
+
+def test_detail_shows_difficulty_distribution_with_denominators(tmp_path):
+    run = make_run("a")
+    easy = _result("facil", passed=True)
+    easy.difficulty = Difficulty.FACIL
+    hard = _result("dificil", passed=False)
+    hard.difficulty = Difficulty.DIFICIL
+    run.results = [easy, hard]
+    client = gui_app.create_app(make_db(tmp_path, [run])).test_client()
+
+    response = client.get("/runs/a")
+
+    assert response.status_code == 200
+    assert b"Distribui\xc3\xa7\xc3\xa3o por dificuldade" in response.data
+    assert b"F\xc3\xa1cil" in response.data
+    assert b"Dif\xc3\xadcil" in response.data
+    assert b"1/1" in response.data
+    assert b"0/1" in response.data
+
+
+def test_detail_difficulty_distribution_has_an_empty_state(tmp_path):
+    client = gui_app.create_app(make_db(tmp_path, [make_run("a")])).test_client()
+
+    response = client.get("/runs/a")
+
+    assert response.status_code == 200
+    assert b"Nenhuma dificuldade com casos registrados" in response.data
 
 
 def test_comparison_aligns_cases_and_explains_denominators(tmp_path):
@@ -119,6 +148,16 @@ def test_unknown_run_returns_404(tmp_path):
 
     assert client.get("/runs/missing").status_code == 404
     assert client.get("/compare?a=missing&b=run-a").status_code == 404
+
+
+@pytest.mark.parametrize("url", ["/not-a-route", "/static/missing.css"])
+def test_unknown_routes_and_assets_return_http_404(tmp_path, url):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    response = client.get(url)
+
+    assert response.status_code == 404
+    assert b"P\xc3\xa1gina n\xc3\xa3o encontrada" in response.data
 
 
 @pytest.mark.parametrize(
@@ -146,6 +185,28 @@ def test_empty_database_shows_an_empty_state(tmp_path):
 
     assert response.status_code == 200
     assert b"Nenhum run registrado" in response.data
+
+
+def test_no_match_filter_is_distinct_from_an_empty_database(tmp_path):
+    client = gui_app.create_app(make_db(tmp_path, [make_run("a")])).test_client()
+
+    response = client.get("/?model=nao-existe")
+
+    assert response.status_code == 200
+    assert b"Nenhum run corresponde aos filtros" in response.data
+    assert b"Nenhum run registrado" not in response.data
+    assert b"Limpar filtros" in response.data
+
+
+def test_page_beyond_history_links_to_the_last_page(tmp_path):
+    runs = [make_run(f"run-{index:02}") for index in range(26)]
+    client = gui_app.create_app(make_db(tmp_path, runs)).test_client()
+
+    response = client.get("/?page=9&seed=42")
+
+    assert response.status_code == 200
+    assert b"Voc\xc3\xaa est\xc3\xa1 al\xc3\xa9m da \xc3\xbaltima p\xc3\xa1gina" in response.data
+    assert b'href="/?page=2&amp;seed=42"' in response.data
 
 
 def test_invalid_run_payload_has_an_explicit_error_screen(tmp_path):
