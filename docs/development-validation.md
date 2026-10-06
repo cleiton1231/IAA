@@ -65,3 +65,32 @@ The GUI, wheel, HTTP requests, and screenshots use synthetic records. No local
 model was started and no real benchmark was run. The screenshot check covers the
 history, detail, comparison, and mobile history views. A separate security audit
 has not been run as part of this validation report.
+
+## Scoped functional integration fix — 2026-10-06
+
+Based on the final functional review at `09e2e6e7ab6a7c72bf91f725f03afa7bfb3cbc78`:
+
+- Historical imported-case detection now recognizes the repository's
+  `source="imported.humaneval"` form while retaining legacy `source="imported"`
+  and `suite="humaneval"` recognition. A loader-contract regression persists
+  two runs with the same historical `{"code": 1}` map, reads them through the
+  GUI reader, and confirms comparison warns that the version is ambiguous. A
+  matching `imported/code` identity does not produce that warning.
+- Detail HTML labels persisted check turns 1 and 2. Compact packet checks carry
+  the same turn labels; checks without turn metadata keep their previous text.
+  The persisted initial failure still makes the case fail.
+- `/workspace/.venvs/IAA/bin/pytest` — 230 passed; ruff, cached `pip check`, and
+  `git diff --check` passed.
+- Fresh wheel built with system setuptools 84.0.0 at
+  `/tmp/iaa-functional-fix.2rKxeH/wheelhouse/bancada-0.1.0-py3-none-any.whl`
+  (SHA-256 `80932597eeb09af8b862b9faa3f0eb601ea75e52520f0b8fea6277ea8fa55f2a`)
+  and installed into `/workspace/.onboarding/wheel-env`. From `/tmp`, the
+  installed package resolved to
+  `/workspace/.onboarding/wheel-env/lib/python3.12/site-packages/bancada`.
+  Targeted WSGI requests returned 200 for historical comparison and run detail;
+  rendered turn labels, ambiguity warning, legacy formatting, and aggregate
+  failure were asserted. No unchanged full browser run was repeated.
+
+All records used for this validation are synthetic. No model, inference call,
+network request, prompt, cap, or dependency was added. This scoped fix does not
+include the separate security audit.

@@ -1,11 +1,16 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
 from bancada.client import Client
 from bancada.gui import app as gui_app
-from bancada.gui.reader import DatabaseReadError
+from bancada.gui.metrics import compare_runs
+from bancada.gui.reader import DatabaseReadError, read_run
+from bancada.loader import load_named_suites
 from bancada.models import CaseResult, CheckOutcome, Difficulty, Gabarito, Run, Stance
+from bancada.packet import render_packet
+from bancada.store import save_run
 from tests.gui_helpers import make_db, make_run
 
 
@@ -54,6 +59,111 @@ def test_history_detail_and_comparison_render_in_portuguese(tmp_path):
     assert b"regress\xc3\xa3o" in comparison.data.lower()
     assert b"s\xc3\xb3-a" in comparison.data
     assert b"s\xc3\xb3-b" in comparison.data
+
+
+def test_historical_humaneval_provenance_warns_after_save_read_and_render(tmp_path):
+    suites = load_named_suites(
+        Path(__file__).parents[1] / "suites",
+        ["code"],
+        include_imported=True,
+        imported_cap=1,
+    )
+    imported_case = suites[1].cases[0]
+    assert imported_case.source == "imported.humaneval"
+    assert imported_case.suite == "code"
+
+    result = CaseResult(
+        case_id=imported_case.id,
+        suite=imported_case.suite,
+        category=imported_case.category,
+        source=imported_case.source,
+        prompt=imported_case.prompt,
+        reply="pass",
+        checks=[CheckOutcome(type="python_test", ok=True)],
+        gabarito=imported_case.gabarito,
+    )
+    runs = [
+        Run(
+            id=run_id,
+            model_id=f"model-{run_id}",
+            endpoint="http://127.0.0.1:8080/v1",
+            suite_versions={"code": 1},
+            results=[result],
+            max_tokens=512,
+            timeout=30,
+            temperature=0,
+            seed=42,
+            harness="direct",
+        )
+        for run_id in ("legacy-a", "legacy-b")
+    ]
+    db = tmp_path / "legacy-humaneval.sqlite"
+    for run in runs:
+        save_run(db, run)
+
+    loaded_a = read_run(db, "legacy-a").run
+    loaded_b = read_run(db, "legacy-b").run
+    assert loaded_a is not None and loaded_b is not None
+    warnings = compare_runs(loaded_a, loaded_b)["warnings"]
+    suite_warning = next(
+        (warning for warning in warnings if warning["field"] == "suite_versions"), None
+    )
+    assert suite_warning is not None and suite_warning["ambiguous"] is True
+
+    response = gui_app.create_app(db).test_client().get(
+        "/compare?a=legacy-a&b=legacy-b"
+    )
+    assert response.status_code == 200
+    assert "versão histórica ambígua" in response.get_data(as_text=True)
+    assert "Configurações comparáveis" not in response.get_data(as_text=True)
+
+    distinct_versions = loaded_a.model_copy(
+        update={"suite_versions": {"code": 1, "imported/code": 2}}
+    )
+    distinct_peer = loaded_b.model_copy(
+        update={"suite_versions": {"code": 1, "imported/code": 2}}
+    )
+    assert "suite_versions" not in {
+        warning["field"]
+        for warning in compare_runs(distinct_versions, distinct_peer)["warnings"]
+    }
+
+
+def test_turn_check_provenance_renders_in_detail_and_packet_after_persistence(tmp_path):
+    run = make_run("turns")
+    run.results = [
+        _result("two-turn-checks", passed=False).model_copy(
+            update={
+                "checks": [
+                    CheckOutcome(
+                        type="tool_name", ok=False, reason="initial check failed", turn=1
+                    ),
+                    CheckOutcome(
+                        type="tool_name", ok=True, reason="final check passed", turn=2
+                    ),
+                    CheckOutcome(type="not_empty", ok=True, reason="legacy check"),
+                ]
+            }
+        )
+    ]
+    db = tmp_path / "turn-checks.sqlite"
+    save_run(db, run)
+    loaded = read_run(db, "turns").run
+    assert loaded is not None
+    assert [check.turn for check in loaded.results[0].checks] == [1, 2, None]
+
+    detail = gui_app.create_app(db).test_client().get("/runs/turns")
+    assert detail.status_code == 200
+    detail_text = detail.get_data(as_text=True)
+    assert "tool_name · turno 1" in detail_text
+    assert "tool_name · turno 2" in detail_text
+    assert "not_empty ·" not in detail_text
+    assert "Reprovado" in detail_text
+
+    packet = render_packet(loaded)
+    assert "tool_name[turno 1]=fail" in packet
+    assert "tool_name[turno 2]=pass" in packet
+    assert "not_empty=pass (legacy check)" in packet
 
 
 def test_quality_speed_chart_table_is_available_in_collapsed_disclosure(tmp_path):

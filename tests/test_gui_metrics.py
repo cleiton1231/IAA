@@ -288,6 +288,21 @@ def test_comparison_warns_on_config_difference_and_ambiguous_history() -> None:
         for warning in warnings
     )
 
+    legacy_imported_source = _run(
+        "legacy-imported-source",
+        _result("x").model_copy(update={"source": "imported"}),
+        suite_versions={"code": 1},
+    )
+    legacy_peer = _run(
+        "legacy-peer", _result("x"), suite_versions={"code": 1}
+    )
+    legacy_warning = next(
+        warning
+        for warning in compare_runs(legacy_imported_source, legacy_peer)["warnings"]
+        if warning["field"] == "suite_versions"
+    )
+    assert legacy_warning["ambiguous"] is True
+
     missing = compare_runs(
         _run("old", _result("x"), suite_versions={}),
         _run("new", _result("x"), suite_versions={}),

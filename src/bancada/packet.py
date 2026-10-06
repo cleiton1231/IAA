@@ -353,7 +353,8 @@ def _render(run: Run, compact: bool) -> str:
 
 def _case_block(result: CaseResult, compact: bool = False) -> list[str]:
     checks = ", ".join(
-        f"{c.type}={'pass' if c.ok else 'fail'}" + (f" ({c.reason})" if c.reason else "")
+        f"{c.type}{f'[turno {c.turn}]' if c.turn is not None else ''}={'pass' if c.ok else 'fail'}"
+        + (f" ({c.reason})" if c.reason else "")
         for c in result.checks
     ) or "(none)"
     gab = result.gabarito

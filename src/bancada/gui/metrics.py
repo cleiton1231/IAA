@@ -162,7 +162,12 @@ _COMPARISON_FIELDS = (
 
 
 def _has_imported_cases(run: Run) -> bool:
-    return any(result.source == "imported" or result.suite == "humaneval" for result in run.results)
+    return any(
+        result.source == "imported"
+        or result.source.startswith("imported.")
+        or result.suite == "humaneval"
+        for result in run.results
+    )
 
 
 def _ambiguous_imported_versions(run: Run) -> bool:
