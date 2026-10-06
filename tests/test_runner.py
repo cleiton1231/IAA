@@ -355,6 +355,136 @@ def test_multiturn_runner_native_tool_call() -> None:
     assert all(c.ok for c in res.checks)
 
 
+def _multiturn_case_with_initial_checks() -> Case:
+    return Case(
+        id="tools.multiturn-initial-check",
+        suite="tools",
+        difficulty=Difficulty.MEDIO,
+        prompt="Inspecione o arquivo antes de editar.",
+        fake_tool_response="conteúdo atual",
+        turn2_prompt="Agora conclua.",
+        gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+        turn1_machine_checks=[
+            MachineCheck(type="tool_name", expected="exec"),
+            MachineCheck(type="tool_args", pattern=r"\bcat\b.*python_version\.md"),
+            MachineCheck(type="must_not", pattern=r"\b(rm|mv|cp|touch)\b|>"),
+        ],
+        machine_checks=[MachineCheck(type="tool_name", expected="exec")],
+    )
+
+
+class _ChatSequence:
+    endpoint = "http://mock/v1"
+
+    def __init__(self, responses: list[Any]):
+        self.responses = responses
+        self.call_count = 0
+
+    def chat(self, **kwargs: Any) -> Any:
+        response = self.responses[self.call_count]
+        self.call_count += 1
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def _exec_call(command: str) -> dict[str, Any]:
+    return {"function": {"name": "exec", "arguments": json.dumps({"command": command})}}
+
+
+def test_multiturn_bad_first_call_cannot_pass() -> None:
+    from bancada.client import ChatResult
+    from bancada.runner import run_case
+
+    case = _multiturn_case_with_initial_checks()
+    malicious = _ChatSequence(
+        [
+            ChatResult(text="", tool_calls=[_exec_call("rm -rf /")]),
+            ChatResult(text="Inspeção concluída.", tool_calls=[_exec_call("cat notes.md")]),
+        ]
+    )
+    result = run_case(malicious, case)
+    assert any(check.turn == 1 and not check.ok for check in result.checks)
+    assert result.fail_class != "ok"
+    assert result.fail_reason == "dangerous_exec"
+    assert any(check.turn == 2 for check in result.checks)
+    assert malicious.call_count == 2
+
+    safe = _ChatSequence(
+        [
+            ChatResult(
+                text="", tool_calls=[_exec_call("cat tests/fixtures/notes/python_version.md")]
+            ),
+            ChatResult(text="Inspeção concluída.", tool_calls=[_exec_call("cat notes.md")]),
+        ]
+    )
+    safe_result = run_case(safe, case)
+    assert all(check.ok for check in safe_result.checks)
+    assert safe.call_count == 2
+
+
+def test_multiturn_missing_tool_records_initial_failure() -> None:
+    from bancada.client import ChatResult
+    from bancada.runner import run_case
+
+    client = _ChatSequence([ChatResult(text="Vou verificar o arquivo.")])
+    result = run_case(client, _multiturn_case_with_initial_checks())
+    assert client.call_count == 1
+    assert any(check.turn == 1 and not check.ok for check in result.checks)
+    assert result.fail_class != "ok"
+
+
+def test_multiturn_text_fallback_checks_first_turn() -> None:
+    from bancada.client import ChatResult
+    from bancada.runner import run_case
+
+    fallback = (
+        '<function=exec>{"arguments":{"command":'
+        '"cat /workspace/tests/fixtures/notes/python_version.md"}}</function>'
+    )
+    client = _ChatSequence(
+        [
+            ChatResult(text=fallback),
+            ChatResult(text="Concluído.", tool_calls=[_exec_call("cat notes.md")]),
+        ]
+    )
+    result = run_case(client, _multiturn_case_with_initial_checks())
+    assert any(check.turn == 1 and check.ok for check in result.checks)
+    assert client.call_count == 2
+
+
+def test_second_turn_error_preserves_first_turn_checks() -> None:
+    from bancada.client import ChatError, ChatResult
+    from bancada.runner import run_case
+
+    client = _ChatSequence(
+        [
+            ChatResult(text="", tool_calls=[_exec_call("cat notes/python_version.md")]),
+            ChatError("second turn failed"),
+        ]
+    )
+    result = run_case(client, _multiturn_case_with_initial_checks())
+    assert result.error == "second turn failed"
+    assert any(check.turn == 1 and check.ok for check in result.checks)
+    assert result.fail_class == "error"
+    assert client.call_count == 2
+
+
+def test_case_initial_checks_default_and_check_turn_round_trip() -> None:
+    from bancada.models import CheckOutcome
+
+    historical = Case(
+        id="tools.old",
+        suite="tools",
+        difficulty=Difficulty.FACIL,
+        prompt="Old case",
+        gabarito=Gabarito(stance=Stance.ACCEPT_TRUE_CONTROL),
+    )
+    assert historical.turn1_machine_checks == []
+    outcome = CheckOutcome(type="tool_name", ok=True, turn=1)
+    assert CheckOutcome.model_validate(outcome.model_dump()).turn == 1
+
+
 def test_runner_resume_skips_already_executed_cases() -> None:
     calls = 0
 

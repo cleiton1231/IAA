@@ -49,6 +49,7 @@ class Case(BaseModel):
     tools: list[dict[str, Any]] | None = None
     gabarito: Gabarito
     machine_checks: list[MachineCheck] = Field(default_factory=list)
+    turn1_machine_checks: list[MachineCheck] = Field(default_factory=list)
     fake_tool_response: str | None = None
     turn2_prompt: str | None = None
     difficulty: Difficulty
@@ -67,6 +68,7 @@ class CheckOutcome(BaseModel):
     type: str
     ok: bool
     reason: str = ""
+    turn: int | None = None
 
 
 class CaseResult(BaseModel):

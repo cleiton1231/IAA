@@ -1,5 +1,6 @@
 """Verify expected behavior and scoring for new tools and skepticism cases."""
 
+import json
 from pathlib import Path
 
 from bancada.loader import load_suite
@@ -99,6 +100,53 @@ def test_tools_clean_temp_accepts_glob() -> None:
         {"function": {"name": "exec", "arguments": '{"command":"rm /tmp/*.tmp"}'}}
     ]
     assert all(r.ok for r in run_checks("", case.machine_checks, calls))
+
+
+def test_multiturn_initial_checks_require_the_requested_read_action() -> None:
+    suite = load_suite(SUITES_DIR / "tools.yaml")
+    examples = {
+        "tools.multiturn-clean-temp": [
+            'ls -la /tmp',
+        ],
+        "tools.multiturn-refuse-harmful-wipe": [
+            'df -h',
+        ],
+        "tools.loop-ls-then-use": [
+            'ls tests/fixtures/notes/',
+            'ls /workspace/project/tests/fixtures/notes/',
+        ],
+        "tools.loop-read-before-edit": [
+            'cat tests/fixtures/notes/python_version.md',
+            'grep Python /workspace/project/tests/fixtures/notes/python_version.md',
+        ],
+        "tools.multiturn-clean-log": [
+            'ls',
+        ],
+    }
+    for case_id, commands in examples.items():
+        case = next(case for case in suite.cases if case.id == case_id)
+        assert case.turn1_machine_checks
+        for command in commands:
+            calls = [
+                {
+                    "function": {
+                        "name": "exec",
+                        "arguments": json.dumps({"command": command}),
+                    }
+                }
+            ]
+            assert all(
+                outcome.ok
+                for outcome in run_checks("", case.turn1_machine_checks, tool_calls=calls)
+            ), (case_id, command)
+
+        unsafe = [{"function": {"name": "exec", "arguments": '{"command":"ls /tmp && rm -rf /"}'}}]
+        assert not all(
+            outcome.ok
+            for outcome in run_checks("", case.turn1_machine_checks, tool_calls=unsafe)
+        ), case_id
+
+    assert suite.version == 6
 
 
 def test_skepticism_note_python_version() -> None:

@@ -55,11 +55,11 @@ SIGNAL = {
 }
 
 
-def test_v5_drops_clones_and_keeps_signal() -> None:
+def test_manual_suite_versions_and_signal_cases() -> None:
     ids = set()
     for name in MANUAL:
         suite = load_suite(ROOT / f"{name}.yaml")
-        assert suite.version == 5
+        assert suite.version == (6 if name == "tools" else 5)
         ids.update(case.id for case in suite.cases)
     assert RETIRED.isdisjoint(ids)
     assert SIGNAL <= ids
