@@ -51,6 +51,12 @@ def _run_one(
         return _python_test(reply, check.source or "", check.setup)
     if check.type == "wikilink_allowlist":
         return _wikilinks(reply, check.allowed or [])
+    if check.type == "markdown_h1":
+        return _markdown_h1(reply, check.expected)
+    if check.type == "wikilink_required":
+        return _wikilink_required(reply, check.allowed or [])
+    if check.type == "flashcard_pairs":
+        return _flashcard_pairs(reply, check.expected or "3")
     if check.type == "tool_name":
         return _tool_name(tool_calls, check.expected, reply)
     if check.type == "tool_args":
@@ -183,12 +189,87 @@ def _has_flush_left_definition(code: str) -> bool:
 
 
 def _wikilinks(reply: str, allowed: list[str]) -> CheckResult:
-    found = WIKILINK_RE.findall(reply or "")
+    found = [_wikilink_target(link) for link in WIKILINK_RE.findall(reply or "")]
     allow = set(allowed)
     unknown = [name for name in found if name not in allow]
     if unknown:
         return CheckResult("wikilink_allowlist", False, f"unknown wikilinks: {', '.join(unknown)}")
     return CheckResult("wikilink_allowlist", True, "")
+
+
+def _wikilink_target(link: str) -> str:
+    return link.split("|", 1)[0].strip()
+
+
+def _wikilink_required(reply: str, required: list[str]) -> CheckResult:
+    found = {_wikilink_target(link) for link in WIKILINK_RE.findall(reply or "")}
+    missing = [target for target in required if target not in found]
+    return CheckResult(
+        "wikilink_required",
+        not missing,
+        "" if not missing else f"missing wikilinks: {', '.join(missing)}",
+    )
+
+
+def _outside_fenced_code(reply: str) -> str:
+    lines = (reply or "").splitlines()
+    visible: list[str] = []
+    fence_char: str | None = None
+    fence_length = 0
+    for line in lines:
+        match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+        if match:
+            marker = match.group(1)
+            if fence_char is None:
+                fence_char, fence_length = marker[0], len(marker)
+            elif marker[0] == fence_char and len(marker) >= fence_length:
+                fence_char, fence_length = None, 0
+            continue
+        if fence_char is None:
+            visible.append(line)
+    return "\n".join(visible)
+
+
+def _markdown_h1(reply: str, expected: str | None) -> CheckResult:
+    text = _outside_fenced_code(reply)
+    headings = re.findall(
+        r"^\s{0,3}#(?!#)\s+(.+?)\s*#*\s*$", text, re.MULTILINE
+    )
+    titles = [re.sub(r"\s+#+\s*$", "", title).strip() for title in headings]
+    if expected is None:
+        ok = bool(titles)
+    else:
+        ok = expected in titles
+    reason = "" if ok else (f"missing H1: {expected}" if expected else "missing H1")
+    return CheckResult("markdown_h1", ok, reason)
+
+
+def _flashcard_pairs(reply: str, expected: str) -> CheckResult:
+    try:
+        wanted = int(expected)
+    except (TypeError, ValueError):
+        return CheckResult("flashcard_pairs", False, f"invalid pair count: {expected}")
+    questions = re.compile(r"^(?:\*\*)?(?:pergunta|quest[aã]o|q)(?:\*\*)?\s*:", re.IGNORECASE)
+    answers = re.compile(r"^(?:\*\*)?(?:resposta|answer|a)(?:\*\*)?\s*:", re.IGNORECASE)
+    pairs = 0
+    awaiting_answer = False
+    malformed = False
+    for line in _outside_fenced_code(reply).splitlines():
+        line = re.sub(r"^\s*(?:(?:[-+*])\s+|\d+[.)]\s+)", "", line).strip()
+        line = line.replace("**", "").replace("__", "").strip()
+        if questions.match(line):
+            if awaiting_answer:
+                malformed = True
+            awaiting_answer = True
+        elif answers.match(line):
+            if not awaiting_answer:
+                malformed = True
+            else:
+                pairs += 1
+                awaiting_answer = False
+    ok = pairs == wanted and not awaiting_answer and not malformed
+    reason = "" if ok else f"expected {wanted} complete Pergunta/Resposta pairs, got {pairs}"
+    return CheckResult("flashcard_pairs", ok, reason)
 
 
 def _tool_name(
@@ -346,4 +427,3 @@ def _stance(
         return CheckResult("stance", ok, "" if ok else "did not ask for source or express doubt")
 
     return CheckResult("stance", False, f"unknown stance {expected}")
-

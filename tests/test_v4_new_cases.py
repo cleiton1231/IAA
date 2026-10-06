@@ -79,6 +79,10 @@ def test_merge_dicts_no_mutate() -> None:
 
 
 def test_parse_date_invalid_none() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
     checks = [
         MachineCheck(
             type="python_test",
@@ -87,23 +91,49 @@ def test_parse_date_invalid_none() -> None:
                 "assert parse_ymd('2026-13-01') is None\n"
                 "assert parse_ymd('nope') is None\n"
                 "assert parse_ymd('2026-9-1') is None\n"
+                "assert parse_ymd('2026-02-31') is None\n"
+                "assert parse_ymd('2026-00-10') is None\n"
+                "assert parse_ymd('2026-01-32') is None\n"
+                "assert parse_ymd('2024-02-29') == (2024, 2, 29)\n"
+                "assert parse_ymd('2000-02-29') == (2000, 2, 29)\n"
+                "assert parse_ymd('2026-02-29') is None\n"
+                "assert parse_ymd('1900-02-29') is None\n"
+                "assert parse_ymd(' 2026-09-20') is None\n"
+                "assert parse_ymd('2026-09-20 ') is None\n"
             ),
         )
     ]
     reply = (
         "```python\n"
         "import re\n"
+        "from datetime import date\n"
         "def parse_ymd(s):\n"
         "    m = re.fullmatch(r'(\\d{4})-(\\d{2})-(\\d{2})', s or '')\n"
         "    if not m:\n"
         "        return None\n"
         "    y, mo, d = map(int, m.groups())\n"
-        "    if not (1 <= mo <= 12 and 1 <= d <= 31):\n"
+        "    try:\n"
+        "        date(y, mo, d)\n"
+        "    except ValueError:\n"
         "        return None\n"
         "    return (y, mo, d)\n"
         "```"
     )
     assert run_checks(reply, checks)[0].ok is True
+
+    suite = load_suite(Path(__file__).resolve().parents[1] / "suites" / "code.yaml")
+    case = next(case for case in suite.cases if case.id == "code.parse-ymd")
+    naive = (
+        "```python\nimport re\n"
+        "def parse_ymd(s):\n"
+        "    m = re.fullmatch(r'(\\d{4})-(\\d{2})-(\\d{2})', s or '')\n"
+        "    if not m: return None\n"
+        "    y, mo, d = map(int, m.groups())\n"
+        "    if not (1 <= mo <= 12 and 1 <= d <= 31): return None\n"
+        "    return (y, mo, d)\n```"
+    )
+    assert not all(result.ok for result in run_checks(naive, case.machine_checks))
+    assert all(result.ok for result in run_checks(reply, case.machine_checks))
 
 
 def test_aritmetica_sem_tool() -> None:

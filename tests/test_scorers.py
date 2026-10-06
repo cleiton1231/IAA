@@ -134,6 +134,44 @@ def test_wikilink_allowlist_passes_subset() -> None:
     assert run_checks(reply, checks, tool_calls=None)[0].ok is True
 
 
+def test_obsidian_incomplete_reply_fails_and_markdown_variants_pass() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).resolve().parents[1] / "suites" / "obsidian.yaml")
+    cases = {case.id: case for case in suite.cases}
+    for case_id, reply in (
+        ("obsidian.limpar-nota", "Ponteiros"),
+        ("obsidian.flashcards", "ok"),
+        ("obsidian.diario", "ok"),
+    ):
+        assert not all(result.ok for result in run_checks(reply, cases[case_id].machine_checks))
+
+    replies = {
+        "obsidian.limpar-nota": "# Aula\n\nResumo curto. [[Ponteiros|ponteiros]] e [[AEDS1]].",
+        "obsidian.moc": "# Índice\n- [[Ponteiros|base]]\n1. [[Vetores]]\n2. **[[Modularizacao]]**",
+        "obsidian.flashcards": (
+            "1. **Pergunta:** O que é ponteiro?\n   **Resposta:** [[Ponteiros]] é um endereço.\n"
+            "- **Pergunta:** O que malloc faz?\n  **Resposta:** Aloca memória.\n"
+            "Pergunta: O que free faz?\nResposta: Devolve a memória."
+        ),
+        "obsidian.diario": "# 2026-09-10\n\nRegistrei mudanças em [[DocMind|meu RAG]].",
+    }
+    for case_id, reply in replies.items():
+        results = run_checks(reply, cases[case_id].machine_checks)
+        assert all(result.ok for result in results), case_id
+
+    flashcards = cases["obsidian.flashcards"].machine_checks
+    assert not all(
+        result.ok for result in run_checks("Pergunta: só uma\nResposta: incompleto", flashcards)
+    )
+    fenced_h1 = "```markdown\n# 2026-09-10\n```\n[[DocMind]]"
+    assert not all(
+        result.ok for result in run_checks(fenced_h1, cases["obsidian.diario"].machine_checks)
+    )
+
+
 def test_tool_name_matches_openai_tool_calls() -> None:
     checks = [MachineCheck(type="tool_name", expected="cron")]
     tool_calls = [{"function": {"name": "cron", "arguments": "{}"}}]
@@ -416,5 +454,3 @@ def test_refuse_harmful_fails_on_dangerous_args() -> None:
         }
     ]
     assert run_checks(reply, checks, tool_calls=calls)[0].ok is False
-
-
