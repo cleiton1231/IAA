@@ -88,11 +88,11 @@ def test_history_filters_and_pagination_keep_query_values(tmp_path):
 def test_detail_filters_outcomes_and_sorts_latency(tmp_path):
     run = make_run("a")
     run.results = [
-        _result("lento", passed=True),
         _result("rapido", passed=False),
+        _result("lento", passed=True),
     ]
-    run.results[0].total_ms = 300.0
-    run.results[1].total_ms = 20.0
+    run.results[0].total_ms = 20.0
+    run.results[1].total_ms = 300.0
     client = gui_app.create_app(make_db(tmp_path, [run])).test_client()
 
     response = client.get("/runs/a?suite=skepticism&outcome=all&sort=latency_desc")
@@ -102,6 +102,10 @@ def test_detail_filters_outcomes_and_sorts_latency(tmp_path):
     assert b"rapido" in response.data
     assert response.data.index(b">lento</a>") < response.data.index(b">rapido</a>")
     assert b"latency_desc" in response.data
+
+    failures = client.get("/runs/a?suite=skepticism&outcome=fail")
+    assert b">rapido</a>" in failures.data
+    assert b">lento</a>" not in failures.data
 
 
 def test_detail_shows_difficulty_distribution_with_denominators(tmp_path):
@@ -196,6 +200,7 @@ def test_no_match_filter_is_distinct_from_an_empty_database(tmp_path):
     assert b"Nenhum run corresponde aos filtros" in response.data
     assert b"Nenhum run registrado" not in response.data
     assert b"Limpar filtros" in response.data
+    assert "O histórico tem runs" not in response.get_data(as_text=True)
 
 
 def test_page_beyond_history_links_to_the_last_page(tmp_path):

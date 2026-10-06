@@ -231,6 +231,34 @@ cases:
     assert [case.id for case in suites[1].cases] == ["imported.a"]
 
 
+def test_apply_cap_preserves_prepopulated_version_identity(tmp_path: Path) -> None:
+    path = tmp_path / "imported.yaml"
+    path.write_text(
+        """version: 1
+suite: code
+cases:
+  - id: imported.a
+    source: imported.humaneval
+    difficulty: medio
+    prompt: a
+    gabarito: {stance: accept_true_control}
+  - id: imported.b
+    source: imported.humaneval
+    difficulty: medio
+    prompt: b
+    gabarito: {stance: accept_true_control}
+""",
+        encoding="utf-8",
+    )
+    from bancada.loader import _apply_cap
+
+    suite = load_suite(path).model_copy(update={"version_key": "imported/code"})
+    capped = _apply_cap(suite, 1)
+
+    assert [case.id for case in capped.cases] == ["imported.a"]
+    assert capped.version_key == "imported/code"
+
+
 def test_invalid_stance_fails(tmp_path: Path) -> None:
     path = tmp_path / "stance.yaml"
     path.write_text(

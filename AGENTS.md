@@ -29,7 +29,7 @@ Branch de trabalho: `feat/bancada`. Workspace: este diretório.
 
 ```bash
 cd /home/cleiton/Vibe_coding/grok
-pip install -e '.[dev]'
+pip install -e '.[dev,gui]'
 pytest
 curl -sS -m 3 http://127.0.0.1:8080/v1/models
 python -m bancada.cli health --endpoint http://127.0.0.1:8080/v1
@@ -88,7 +88,8 @@ Resumo: `pass N/M (XX%) | p50…` + linhas `enem_score` / `suspeito` / `fails: �
 | `--seed` | `42` | Determinismo (também no llama-server) |
 | `--max-tokens` | `512` | Teto global; YAML por caso (código 384, texto 256, 2-turn 512) |
 | `--timeout` | `60` (script usa `90`) | Por caso |
-| `--no-imported` | — | Só manuais (v5, ~53 casos) |
+| `--no-imported` | — | Só manuais (53 casos: code 6, tools 6, obsidian 6, skepticism 5) |
+| `--workers` | `1` | Paralelismo só quando solicitado explicitamente e suportado pelo servidor |
 | `--imported-cap` | `12` com `code` | Só o HumanEval. Não passar `--cap`: ele corta o YAML manual no começo |
 
 ---
@@ -126,6 +127,31 @@ python -m bancada.cli diff RUN_A RUN_B
 
 ---
 
+### Painel local (somente leitura)
+
+Instale o extra opcional com `pip install -e '.[dev,gui]'` e execute
+`bancada gui --db data/bancada.sqlite --port 8765`. A GUI escuta apenas em
+`127.0.0.1`; abra `http://127.0.0.1:8765` manualmente e encerre com Ctrl+C.
+O caminho do SQLite é escolhido na CLI. Banco ausente causa erro e não é criado;
+banco válido vazio mostra estado vazio. Não há migração automática de schema.
+
+O histórico exibe o timestamp gravado no banco, não a duração ou conclusão do
+run. A aprovação automática exige checks existentes aprovados e nenhum erro; isso
+não prova qualidade semântica. Nota do juiz mostra cobertura, risco é uma taxa de
+aprovação das categorias correspondentes e categoria ausente conta zero para
+utilidade. Velocidade usa medidas armazenadas e amostras identificadas; latência
+acumulada não representa duração real com workers paralelos. O `ttft_ms` legado
+representa processamento do prompt. Nos casos de dois turnos, tokens são somados,
+mas a velocidade gravada é a do segundo turno. Payload gerado é mostrado como
+texto escapado; a interface não executa modelos, SQL ou conteúdo do run.
+
+Em bancos antigos, versões ou campos de configuração ausentes deixam a
+comparabilidade inconclusiva. O mapa atual é `code` 6, `tools` 6, `obsidian` 6,
+`skepticism` 5; HumanEval é `imported/code` 1 e mantém suíte/categoria `code`.
+Metadados históricos não são reescritos. `--resume` só seleciona runs que gravaram
+modelo, endpoint, mapa completo de versões, seed, temperatura, limite de tokens,
+timeout e harness compatíveis; config ausente em banco antigo não autoriza retomada.
+
 ## Otimizar (escopo permitido)
 
 1. Suítes manuais — gabaritos, tools schemas, `tool_args`.
@@ -140,7 +166,7 @@ Fora do escopo sem pedido: UI React, API Grok, MMLU/SWE-bench, sandbox real de e
 
 ## Checklist ao “rodar bancada”
 
-- [ ] `pytest` verde
+- [ ] `pytest` verde (instale `.[dev,gui]`, pois a suíte também valida a GUI)
 - [ ] `curl` / `bancada health` OK
 - [ ] `./scripts/practical_run.sh` (temp=0 seed=42)
 - [ ] Log até `saved <id>`
@@ -148,3 +174,19 @@ Fora do escopo sem pedido: UI React, API Grok, MMLU/SWE-bench, sandbox real de e
 - [ ] Commits atômicos se mudou código/suítes
 
 Nunca declare “bench passou” sem `saved` + packet (ou `list`) colado.
+
+### Recomendações e recuperação
+
+Esta entrega não acrescenta prompts. O teto segue em 65 casos, até 70 chamadas e
+24.064 tokens de saída no limite de 512 (aproximadamente 13,4 minutos a 30 tok/s,
+sem processamento de prompt, retries ou demais custos); não é medição de GPU.
+Investigue `skepticism.fato-plantado`/`skepticism.riscv-1990` e
+`skepticism.notes-contradict`/`skepticism.contradict-short` como candidatos a
+redundância, mas mantenha-os até comparar histórico real por caso. Priorize
+fixtures para variantes de calendário, JSON de ferramentas e factualidade; use
+seeds pareadas e follow-up seletivo para regressões. Os checks atuais não medem
+automaticamente fidelidade ou semântica e fixture sintética não é bench real.
+
+O ponto de retorno pré-GUI é `48203b0edbfe6657eb6f881cfa3c02777eeb20f6`.
+Inspecione com `git show 48203b0`; para executá-lo, use `git switch --detach
+48203b0` após deixar a working tree limpa. Nunca exclua o SQLite para recuperar.

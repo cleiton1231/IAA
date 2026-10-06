@@ -374,3 +374,64 @@ def test_resume_cli_starts_new_run_when_configuration_differs(
     assert "no compatible resumable run found; starting a new run" in out
     assert "resuming run wrong-seed" not in out
     assert len(list_runs(db)) == 2
+
+
+def test_run_persists_manual_and_capped_imported_version_identities(tmp_path: Path) -> None:
+    suites = tmp_path / "suites"
+    imported_dir = suites / "imported"
+    imported_dir.mkdir(parents=True)
+    manual_cases = "".join(
+        f"""  - id: code.manual-{index}
+    source: manual
+    difficulty: medio
+    prompt: manual {index}
+    gabarito: {{stance: accept_true_control}}
+    machine_checks:
+      - type: not_empty
+"""
+        for index in range(2)
+    )
+    imported_cases = "".join(
+        f"""  - id: imported.humaneval-{index}
+    source: imported.humaneval
+    difficulty: medio
+    prompt: imported {index}
+    gabarito: {{stance: accept_true_control}}
+    machine_checks:
+      - type: not_empty
+"""
+        for index in range(2)
+    )
+    (suites / "code.yaml").write_text(
+        f"version: 6\nsuite: code\ncases:\n{manual_cases}", encoding="utf-8"
+    )
+    (imported_dir / "code.yaml").write_text(
+        f"version: 1\nsuite: code\ncases:\n{imported_cases}", encoding="utf-8"
+    )
+    db = tmp_path / "bancada.sqlite"
+
+    code = main(
+        [
+            "run",
+            "--suites",
+            "code",
+            "--suites-dir",
+            str(suites),
+            "--db",
+            str(db),
+            "--imported",
+            "--imported-cap",
+            "1",
+            "--quiet",
+        ],
+        client=_client(),
+    )
+
+    assert code == 0
+    run = list_runs(db)[0]
+    assert run.suite_versions == {"code": 6, "imported/code": 1}
+    assert [result.case_id for result in run.results] == [
+        "code.manual-0",
+        "code.manual-1",
+        "imported.humaneval-0",
+    ]

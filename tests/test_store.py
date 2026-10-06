@@ -159,6 +159,95 @@ def test_resume_requires_exact_version_map_and_raw_harness(tmp_path: Path) -> No
     )
 
 
+def test_resume_rejects_candidate_with_extra_persisted_version_key(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    run.suite_versions = {"code": 1, "legacy/extra": 4}
+    save_run(db, run)
+
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, config=_resume_config()
+        )
+        is None
+    )
+
+
+def test_resume_rejects_configuration_mismatch_for_automatic_and_explicit_selection(
+    tmp_path: Path,
+) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 41
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    save_run(db, run)
+    expected = _resume_config(seed=42)
+
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, run_id=run.id, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_rejects_candidate_from_schema_without_configuration_columns(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE runs (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                suite_versions TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE case_results (
+                run_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                payload TEXT NOT NULL,
+                PRIMARY KEY (run_id, seq)
+            );
+            INSERT INTO runs (id, model_id, endpoint, suite_versions)
+            VALUES ('legacy-run', 'toy-model', 'http://127.0.0.1:8080/v1', '{"code": 1}');
+            """
+        )
+        original_columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+    assert "seed" not in original_columns
+    assert "harness" not in original_columns
+
+    expected = _resume_config()
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, run_id="legacy-run", config=expected
+        )
+        is None
+    )
+
+
 def test_resume_returns_compatible_incomplete_run_and_retries_errors(tmp_path: Path) -> None:
     from bancada.store import find_resumable_run
 
