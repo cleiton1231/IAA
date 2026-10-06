@@ -691,6 +691,33 @@ def test_loaded_cron_xml_fallback_still_accepts_xml_outside_json_spans() -> None
         assert all(result.ok for result in run_checks(reply, case.machine_checks, tool_calls=[]))
 
 
+def test_loaded_cron_json_fallback_ignores_decoded_xml_spans() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    nested_json = (
+        '{"name":"cron","arguments":{"at":"2026-09-21T09:00:00",'
+        '"message":"Revisar ponteiros"}}'
+    )
+    outer_exec = (
+        "<function=exec><parameter=command>"
+        + nested_json
+        + "</parameter></function>"
+    )
+    outer_cron = (
+        "<function=cron><parameter=at>tomorrow 09:00</parameter>"
+        "<parameter=message>"
+        + nested_json
+        + "</parameter></function>"
+    )
+
+    for reply in (outer_exec, outer_cron):
+        assert not run_checks(reply, case.machine_checks, tool_calls=[])[1].ok
+
+
 def test_must_cover_tmp_glob_satisfies_tmp_filenames() -> None:
     checks = [
         MachineCheck(type="must_cover", pattern="cache_01.tmp", target="arguments"),

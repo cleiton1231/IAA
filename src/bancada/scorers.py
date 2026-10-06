@@ -163,15 +163,39 @@ def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]
     decoder = json.JSONDecoder()
     text = reply or ""
     cursor = 0
-    json_spans: list[tuple[int, int]] = []
+    function_pattern = re.compile(
+        r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        r"([^\"'\s>]+)[\"']?\s*>(.*?)</function>",
+        re.DOTALL,
+    )
+    parameter_pattern = re.compile(
+        r"<parameter(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        + re.escape(field)
+        + r"[\"']?\s*>(.*?)</parameter>",
+        re.DOTALL,
+    )
     while cursor < len(text):
-        if text[cursor] not in "{[":
-            cursor += 1
+        object_start = text.find("{", cursor)
+        array_start = text.find("[", cursor)
+        json_start_candidates = [pos for pos in (object_start, array_start) if pos >= 0]
+        json_start = min(json_start_candidates, default=-1)
+        xml_match = function_pattern.search(text, cursor)
+
+        if xml_match is not None and (json_start < 0 or xml_match.start() < json_start):
+            if xml_match.group(1) == tool_name:
+                values.extend(
+                    parameter_match.group(1).strip()
+                    for parameter_match in parameter_pattern.finditer(xml_match.group(2))
+                )
+            cursor = xml_match.end()
             continue
+
+        if json_start < 0:
+            break
         try:
-            parsed, end = decoder.raw_decode(text, cursor)
+            parsed, end = decoder.raw_decode(text, json_start)
         except (json.JSONDecodeError, RecursionError):
-            cursor += 1
+            cursor = json_start + 1
             continue
         candidates = parsed if isinstance(parsed, list) else [parsed]
         for candidate in candidates:
@@ -184,37 +208,7 @@ def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]
             arguments = _argument_object(source.get("arguments"))
             if arguments is not None and field in arguments:
                 values.append(arguments[field])
-        json_spans.append((cursor, end))
         cursor = end
-    function_pattern = (
-        r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
-        + re.escape(tool_name)
-        + r"[\"']?\s*>(.*?)</function>"
-    )
-    parameter_pattern = (
-        r"<parameter(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
-        + re.escape(field)
-        + r"[\"']?\s*>(.*?)</parameter>"
-    )
-    region_start = 0
-    for span_start, span_end in json_spans:
-        xml_region = text[region_start:span_start]
-        for function_match in re.finditer(function_pattern, xml_region, re.DOTALL):
-            values.extend(
-                parameter_match.group(1).strip()
-                for parameter_match in re.finditer(
-                    parameter_pattern, function_match.group(1), re.DOTALL
-                )
-            )
-        region_start = span_end
-    xml_region = text[region_start:]
-    for function_match in re.finditer(function_pattern, xml_region, re.DOTALL):
-        values.extend(
-            parameter_match.group(1).strip()
-            for parameter_match in re.finditer(
-                parameter_pattern, function_match.group(1), re.DOTALL
-            )
-        )
     return values
 
 
