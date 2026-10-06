@@ -148,7 +148,7 @@ def test_multiturn_initial_checks_require_the_requested_read_action() -> None:
             for outcome in run_checks("", case.turn1_machine_checks, tool_calls=unsafe)
         ), case_id
 
-    assert suite.version == 6
+    assert suite.version == 7
 
 
 def test_multiturn_initial_checks_reject_writes_and_wrong_targets() -> None:

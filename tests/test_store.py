@@ -344,3 +344,30 @@ def test_save_scores_round_trip(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.judge_scores is not None
     assert loaded.judge_scores["cases"][0]["score"] == 3
+
+
+def test_save_scores_rejects_mismatched_identity_before_creating_database(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "missing" / "bancada.sqlite"
+    with pytest.raises(ValueError, match="run_id"):
+        save_scores(db, "destination", {"run_id": "source", "cases": []})
+    assert not db.exists()
+    assert not db.parent.exists()
+
+
+def test_save_scores_rejects_invalid_present_identity(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    save_run(db, _run())
+    before = db.read_bytes()
+    for declared in (None, "", 7, {}, False):
+        with pytest.raises(ValueError, match="run_id"):
+            save_scores(db, "abc123", {"run_id": declared, "cases": []})
+        assert db.read_bytes() == before
+
+
+def test_save_scores_accepts_matching_and_legacy_identity(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    save_run(db, _run())
+    save_scores(db, "abc123", {"run_id": "abc123", "cases": []})
+    save_scores(db, "abc123", {"cases": []})

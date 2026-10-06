@@ -1,5 +1,7 @@
 """Structural scorers operate on the model reply, not on mocks of themselves."""
 
+from typing import Any
+
 from bancada.models import MachineCheck
 from bancada.scorers import extract_code, run_checks
 
@@ -427,6 +429,116 @@ def test_tool_args_accepts_relative_tomorrow() -> None:
         }
     ]
     assert run_checks("", checks, tool_calls=rel)[0].ok is True
+
+
+def test_loaded_cron_checks_reject_relative_and_wrong_field_dates() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    by_id = {case.id: case for case in suite.cases}
+    relative = [
+        {
+            "function": {
+                "name": "cron",
+                "arguments": {"at": "tomorrow 09:00", "message": "Revisar ponteiros"},
+            }
+        }
+    ]
+    date_in_message = [
+        {
+            "function": {
+                "name": "cron",
+                "arguments": {
+                    "at": "2026-09-12T08:00:00",
+                    "message": "pytest em 2026-09-11",
+                },
+            }
+        }
+    ]
+
+    reminder = run_checks("", by_id["tools.cron-lembrete"].machine_checks, relative)
+    iso = run_checks("", by_id["tools.cron-iso"].machine_checks, date_in_message)
+    assert not reminder[1].ok and reminder[2].ok
+    assert not iso[1].ok and iso[2].ok
+
+
+def test_loaded_cron_field_checks_accept_iso_and_matching_message_formats() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    by_id = {case.id: case for case in suite.cases}
+
+    def cron_call(arguments: Any) -> list[dict[str, Any]]:
+        return [{"function": {"name": "cron", "arguments": arguments}}]
+
+    valid_cases = [
+        (
+            "tools.cron-lembrete",
+            cron_call({"at": "2026-09-21T09:00:00", "message": "Revisar ponteiros"}),
+            "",
+        ),
+        (
+            "tools.cron-lembrete",
+            cron_call(
+                '{"at":"2026-09-21T10:00:00+01:00","message":"Revisar ponteiros"}'
+            ),
+            "",
+        ),
+        (
+            "tools.cron-iso",
+            [],
+            'Agendamento: {"name":"cron","arguments":'
+            '{"at":"2026-09-11T08:00:00Z","message":"Rodar pytest"}}',
+        ),
+        (
+            "tools.cron-lembrete",
+            [],
+            "<tool_call><function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+            "<parameter=message>Revisar ponteiros</parameter></function></tool_call>",
+        ),
+    ]
+
+    for case_id, calls, reply in valid_cases:
+        assert all(
+            result.ok
+            for result in run_checks(reply, by_id[case_id].machine_checks, calls)
+        )
+
+
+def test_loaded_cron_field_checks_reject_invalid_or_unrelated_values() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    checks = next(case for case in suite.cases if case.id == "tools.cron-lembrete").machine_checks
+    def cron_call(arguments: Any, name: str = "cron") -> list[dict[str, Any]]:
+        return [{"function": {"name": name, "arguments": arguments}}]
+
+    invalid_calls = [
+        cron_call({"at": "tomorrow 09:00", "message": "ponteiros"}),
+        cron_call({"message": "ponteiros"}),
+        cron_call({"at": 1790269200, "message": "ponteiros"}),
+        cron_call({"at": "2026-02-30T09:00:00", "message": "ponteiros"}),
+        cron_call({"at": "2026-09-20T09:00:00", "message": "2026-09-21T09:00:00 ponteiros"}),
+        cron_call({"at": "2026-09-21T09:00:00", "message": "ponteiros"}, name="exec"),
+        cron_call('{"at":"2026-09-21T09:00:00", "message": "ponteiros"'),
+    ]
+
+    for calls in invalid_calls:
+        outcomes = run_checks("", checks, calls)
+        assert not outcomes[1].ok
+
+
+def test_cron_datetime_normalizes_z_and_offsets_on_python_310() -> None:
+    from bancada.scorers import _iso_datetimes_match
+
+    assert _iso_datetimes_match("2026-09-21T09:00:00Z", "2026-09-21T09:00:00")
+    assert _iso_datetimes_match("2026-09-21T10:00:00+01:00", "2026-09-21T09:00:00")
 
 
 def test_must_cover_tmp_glob_satisfies_tmp_filenames() -> None:

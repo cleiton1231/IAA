@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from bancada.models import MachineCheck
@@ -61,6 +63,15 @@ def _run_one(
         return _tool_name(tool_calls, check.expected, reply)
     if check.type == "tool_args":
         return _tool_args(tool_calls, reply, check.pattern or check.expected or "")
+    if check.type == "tool_field":
+        return _tool_field(
+            tool_calls,
+            reply,
+            tool_name=check.expected or "",
+            field=check.target or "",
+            pattern=check.pattern or "",
+            value_format=check.format,
+        )
     if check.type == "must_cover":
         target = getattr(check, "target", None)
         if target == "arguments":
@@ -96,6 +107,115 @@ def _tool_args(
     if not ok and _cron_relative_at(text, pattern):
         ok = True
     return CheckResult("tool_args", ok, "" if ok else f"args missing: {pattern}")
+
+
+def _tool_field(
+    tool_calls: list[dict[str, Any]] | None,
+    reply: str,
+    *,
+    tool_name: str,
+    field: str,
+    pattern: str,
+    value_format: str | None,
+) -> CheckResult:
+    values: list[Any] = []
+    if tool_calls:
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function")
+            source = function if isinstance(function, dict) else call
+            if source.get("name") != tool_name:
+                continue
+            arguments = _argument_object(source.get("arguments"))
+            if arguments is not None and field in arguments:
+                values.append(arguments[field])
+    else:
+        values.extend(_text_tool_field_values(reply, tool_name, field))
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        if value_format == "iso_datetime":
+            if _iso_datetimes_match(value, pattern):
+                return CheckResult("tool_field", True)
+        elif _match_pattern(value, pattern):
+            return CheckResult("tool_field", True)
+    return CheckResult(
+        "tool_field", False, f"{tool_name}.{field} missing or invalid: {pattern}"
+    )
+
+
+def _argument_object(arguments: Any) -> dict[str, Any] | None:
+    if isinstance(arguments, dict):
+        return arguments
+    if not isinstance(arguments, str):
+        return None
+    try:
+        parsed = json.loads(arguments)
+    except (json.JSONDecodeError, RecursionError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]:
+    values: list[Any] = []
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", reply or ""):
+        try:
+            parsed, _ = decoder.raw_decode(reply, match.start())
+        except (json.JSONDecodeError, RecursionError):
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        function = parsed.get("function")
+        source = function if isinstance(function, dict) else parsed
+        if source.get("name") != tool_name:
+            continue
+        arguments = _argument_object(source.get("arguments"))
+        if arguments is not None and field in arguments:
+            values.append(arguments[field])
+    function_pattern = (
+        r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        + re.escape(tool_name)
+        + r"[\"']?\s*>(.*?)</function>"
+    )
+    parameter_pattern = (
+        r"<parameter(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        + re.escape(field)
+        + r"[\"']?\s*>(.*?)</parameter>"
+    )
+    for function_match in re.finditer(function_pattern, reply or "", re.DOTALL):
+        values.extend(
+            parameter_match.group(1).strip()
+            for parameter_match in re.finditer(
+                parameter_pattern, function_match.group(1), re.DOTALL
+            )
+        )
+    return values
+
+
+def _iso_datetimes_match(candidate: str, expected: str) -> bool:
+    candidate_dt = _parse_iso_datetime(candidate)
+    expected_dt = _parse_iso_datetime(expected)
+    return candidate_dt is not None and candidate_dt == expected_dt
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?"
+        r"(?:Z|[+-]\d{2}:\d{2})?",
+        value,
+    ):
+        return None
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _cron_relative_at(text: str, pattern: str) -> bool:

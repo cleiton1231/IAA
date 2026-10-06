@@ -238,6 +238,7 @@ def merge_scores(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def save_scores(path: Path | str, run_id: str, scores: dict[str, Any]) -> None:
+    _validate_scores_run_id(scores, run_id)
     conn = _connect(Path(path))
     try:
         exists = conn.execute("SELECT 1 FROM runs WHERE id = ?", (run_id,)).fetchone()
@@ -251,3 +252,13 @@ def save_scores(path: Path | str, run_id: str, scores: dict[str, Any]) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def _validate_scores_run_id(scores: dict[str, Any], expected_run_id: str) -> None:
+    if "run_id" not in scores:
+        return
+    declared = scores["run_id"]
+    if not isinstance(declared, str) or not declared.strip() or declared != expected_run_id:
+        raise ValueError(
+            f"scores run_id must be a non-empty string matching destination {expected_run_id}"
+        )

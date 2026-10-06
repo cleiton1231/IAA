@@ -17,6 +17,7 @@ from bancada.packet import render_packet, render_packet_compact, write_auto_scor
 from bancada.runner import run_many
 from bancada.store import (
     ResumeConfig,
+    _validate_scores_run_id,
     find_resumable_run,
     list_runs,
     load_run,
@@ -45,11 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     health = sub.add_parser("health")
-    health.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    health.add_argument("--endpoint", default=None)
     health.set_defaults(func=_cmd_health)
 
     smoke = sub.add_parser("smoke", help="run 1 case per suite for quick validation")
-    smoke.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    smoke.add_argument("--endpoint", default=None)
     smoke.add_argument(
         "--suites",
         default="skepticism,code,obsidian,tools",
@@ -65,7 +66,7 @@ def _parser() -> argparse.ArgumentParser:
     smoke.set_defaults(func=_cmd_smoke)
 
     run = sub.add_parser("run")
-    run.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    run.add_argument("--endpoint", default=None)
     run.add_argument("--suites", required=True, help="comma-separated suite names")
     run.add_argument("--suites-dir", default="suites")
     run.add_argument("--db", default="data/bancada.sqlite")
@@ -166,7 +167,14 @@ def _parser() -> argparse.ArgumentParser:
 def _client(args: argparse.Namespace, client: Client | None) -> Client:
     if client is not None:
         return client
-    endpoint = getattr(args, "endpoint", DEFAULT_ENDPOINT)
+    endpoint = getattr(args, "endpoint", None)
+    if endpoint is None:
+        configured_endpoint = os.environ.get("BANCADA_ENDPOINT")
+        endpoint = (
+            configured_endpoint.strip()
+            if configured_endpoint and configured_endpoint.strip()
+            else DEFAULT_ENDPOINT
+        )
     api_key = os.environ.get("BANCADA_API_KEY")
     model = os.environ.get("BANCADA_MODEL")
     extra = None
@@ -383,8 +391,10 @@ def _cmd_export(args: argparse.Namespace, client: Client | None) -> int:
 def _cmd_ingest(args: argparse.Namespace, client: Client | None) -> int:
     del client
     payload = json.loads(Path(args.scores_json).read_text(encoding="utf-8"))
+    _validate_scores_run_id(payload, args.run_id)
     run = load_run(Path(args.db), args.run_id)
     if run is not None and run.judge_scores:
+        _validate_scores_run_id(run.judge_scores, args.run_id)
         payload = _merge_scores(run.judge_scores, payload)
     elif "auto" in payload or "cases" in payload:
         # Merge auto list + judge cases if both present in one file

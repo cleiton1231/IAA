@@ -11,6 +11,22 @@
   <article class="metric-card"><span class="metric-label">Velocidade p50</span><strong>{% if metrics.tps_p50 is none %}—{% else %}{{ metrics.tps_p50|number }}{% endif %}</strong><span>tokens/s · {{ metrics.tps_count }} amostras</span></article>
 </section>
 
+<section class="panel" aria-labelledby="aggregate-title"><div class="section-heading"><div><p class="eyebrow">AGREGADOS DO RUN</p><h2 id="aggregate-title">Risco, utilidade e suspeito</h2></div><span class="muted">Calculados pela Bancada a partir dos resultados registrados.</span></div>
+  {% set agentico = metrics.categories.get('agentico') %}{% set ceticismo = metrics.categories.get('ceticismo') %}
+  {% set codigo = metrics.categories.get('codigo') %}{% set humanas = metrics.categories.get('humanas') %}
+  {% set risk_covered = (1 if agentico else 0) + (1 if ceticismo else 0) %}
+  {% set utility_covered = (1 if codigo else 0) + (1 if agentico else 0) + (1 if ceticismo else 0) + (1 if humanas else 0) %}
+  {% set easy = metrics.enem.pass_by_difficulty.facil %}{% set hard = metrics.enem.pass_by_difficulty.dificil %}
+  <div class="stat-strip aggregate-strip">
+    <div><span>Média de aprovação agentico/ceticismo · risco</span><strong>{{ metrics.enem.risco|percent }}</strong><small>Categorias disponíveis: {{ risk_covered }}/2 · agentico {{ agentico.total if agentico else 0 }}, ceticismo {{ ceticismo.total if ceticismo else 0 }} casos.</small></div>
+    <div><span>Utilidade</span><strong>{{ metrics.enem.utilidade|percent }}</strong><small>Categorias cobertas: {{ utility_covered }}/4 · ausentes valem zero (codigo {{ codigo.total if codigo else 0 }}, agentico {{ agentico.total if agentico else 0 }}, ceticismo {{ ceticismo.total if ceticismo else 0 }}, humanas {{ humanas.total if humanas else 0 }} casos).</small></div>
+    <div><span>Suspeito · flag de consistência</span><strong>{{ 'Sim' if metrics.enem.suspeito else 'Não' }}</strong>
+      {% if easy.total and hard.total %}<small>Base fácil e difícil disponível: Fácil {{ easy.pass }}/{{ easy.total }} · difícil {{ hard.pass }}/{{ hard.total }}.</small>
+      {% else %}<small>Evidência insuficiente: fácil {{ easy.pass }}/{{ easy.total }} · difícil {{ hard.pass }}/{{ hard.total }}; a flag precisa das duas bases.</small>{% endif %}
+    </div>
+  </div>
+</section>
+
 <section class="panel" aria-labelledby="quality-title"><div class="section-heading"><div><p class="eyebrow">COBERTURA E QUALIDADE</p><h2 id="quality-title">Resultados deste run</h2></div><span class="muted">Métricas ausentes ficam indisponíveis; não viram zero.</span></div>
   <div class="stat-strip">
     <div><span>Latência por caso p50 / p95</span><strong>{{ metrics.latency_p50_ms|number }} / {{ metrics.latency_p95_ms|number }} ms</strong><small>{{ metrics.latency_count }} amostras sem erro</small></div>

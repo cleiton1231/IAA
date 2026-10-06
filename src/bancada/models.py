@@ -38,6 +38,7 @@ class MachineCheck(BaseModel):
     pattern: str | None = None
     setup: str | None = None
     target: str | None = None
+    format: str | None = None
 
 
 class Case(BaseModel):

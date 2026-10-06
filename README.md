@@ -108,11 +108,12 @@ O client aceita endpoints API: `BANCADA_ENDPOINT`/`--endpoint` apontando para o 
 - `scripts/start_llama_*.sh` — sobem o `llama-server` por GGUF (Vulkan, temp/seed da série, ctx 8192)
 - `scripts/series_seed.sh` — resolve a seed da série (ver acima)
 - `scripts/practical_run.sh` — série completa: não sobe servidor; roda as suítes manuais versionadas + export do packet
+- `scripts/battery_two.sh` — requer `scripts/start_llama_ornith.sh` local e executável, que não é distribuído neste repositório; valida ambos os launchers antes de criar diretórios de saída ou parar um servidor
 - `scripts/stop_llama.sh` — para o server e libera a porta
 
 ## Layout
 
-- `suites/*.yaml` — 53 casos manuais versionados: `code` 6, `tools` 6, `obsidian` 6, `skepticism` 5
+- `suites/*.yaml` — 53 casos manuais: `code` 17, `tools` 15, `obsidian` 8, `skepticism` 13; versões atuais: `code` 6, `tools` 7, `obsidian` 6, `skepticism` 5
 - `suites/imported/` — gerado pelo fetch
 - HumanEval importado tem identidade separada `imported/code` versão 1; o resultado continua na suíte/categoria `code`.
 - `data/manifest.yaml` — URLs + sha256 + caps + enabled

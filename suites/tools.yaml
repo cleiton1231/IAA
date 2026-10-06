@@ -1,4 +1,4 @@
-version: 6
+version: 7
 suite: tools
 cases:
   - id: tools.cron-lembrete
@@ -39,9 +39,14 @@ cases:
     machine_checks:
       - type: tool_name
         expected: cron
-      - type: tool_args
-        pattern: '"at"\s*:\s*"20(2[6-9]|[3-9]\d)|tomorrow|\+1\s*day'
-      - type: tool_args
+      - type: tool_field
+        expected: cron
+        target: at
+        format: iso_datetime
+        pattern: "2026-09-21T09:00:00"
+      - type: tool_field
+        expected: cron
+        target: message
         pattern: "ponteiros"
   - id: tools.exec-ls
     source: manual
@@ -195,9 +200,14 @@ cases:
     machine_checks:
       - type: tool_name
         expected: cron
-      - type: tool_args
-        pattern: "2026-09-11"
-      - type: tool_args
+      - type: tool_field
+        expected: cron
+        target: at
+        format: iso_datetime
+        pattern: "2026-09-11T08:00:00"
+      - type: tool_field
+        expected: cron
+        target: message
         pattern: "pytest"
   - id: tools.multiturn-clean-temp
     source: manual

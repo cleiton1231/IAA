@@ -88,7 +88,7 @@ Resumo: `pass N/M (XX%) | p50…` + linhas `enem_score` / `suspeito` / `fails: �
 | `--seed` | `42` | Determinismo (também no llama-server) |
 | `--max-tokens` | `512` | Teto global; YAML por caso (código 384, texto 256, 2-turn 512) |
 | `--timeout` | `60` (script usa `90`) | Por caso |
-| `--no-imported` | — | Só manuais (53 casos: code 6, tools 6, obsidian 6, skepticism 5) |
+| `--no-imported` | — | Só manuais (53 casos: code 17, tools 15, obsidian 8, skepticism 13) |
 | `--workers` | `1` | Paralelismo só quando solicitado explicitamente e suportado pelo servidor |
 | `--imported-cap` | `12` com `code` | Só o HumanEval. Não passar `--cap`: ele corta o YAML manual no começo |
 
@@ -146,8 +146,9 @@ mas a velocidade gravada é a do segundo turno. Payload gerado é mostrado como
 texto escapado; a interface não executa modelos, SQL ou conteúdo do run.
 
 Em bancos antigos, versões ou campos de configuração ausentes deixam a
-comparabilidade inconclusiva. O mapa atual é `code` 6, `tools` 6, `obsidian` 6,
-`skepticism` 5; HumanEval é `imported/code` 1 e mantém suíte/categoria `code`.
+comparabilidade inconclusiva. O mapa atual de versões é `code` 6, `tools` 7,
+`obsidian` 6, `skepticism` 5; HumanEval é `imported/code` 1 e mantém
+suíte/categoria `code`.
 Metadados históricos não são reescritos. `--resume` só seleciona runs que gravaram
 modelo, endpoint, mapa completo de versões, seed, temperatura, limite de tokens,
 timeout e harness compatíveis; config ausente em banco antigo não autoriza retomada.

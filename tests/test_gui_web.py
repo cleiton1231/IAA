@@ -33,6 +33,14 @@ def _result(case_id: str, *, passed: bool = True, reply: str = "Resposta") -> Ca
     )
 
 
+def _aggregate_result(
+    case_id: str, category: str, difficulty: Difficulty, *, passed: bool
+) -> CaseResult:
+    return _result(case_id, passed=passed).model_copy(
+        update={"category": category, "difficulty": difficulty}
+    )
+
+
 def _runs() -> list[Run]:
     a = make_run("run-a", "modelo A")
     a.results = [_result("caso-compartilhado"), _result("só-a")]
@@ -59,6 +67,49 @@ def test_history_detail_and_comparison_render_in_portuguese(tmp_path):
     assert b"regress\xc3\xa3o" in comparison.data.lower()
     assert b"s\xc3\xb3-a" in comparison.data
     assert b"s\xc3\xb3-b" in comparison.data
+
+
+def test_detail_renders_risk_utility_suspect_and_partial_coverage(tmp_path):
+    run = make_run("aggregate-detail")
+    run.results = [
+        _aggregate_result("agentico-pass", "agentico", Difficulty.DIFICIL, passed=True),
+        _aggregate_result("ceticismo-fail", "ceticismo", Difficulty.FACIL, passed=False),
+    ]
+    response = gui_app.create_app(make_db(tmp_path, [run])).test_client().get(
+        "/runs/aggregate-detail"
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Média de aprovação agentico/ceticismo" in html
+    assert "50,0%" in html
+    assert "Utilidade" in html and "25,0%" in html
+    assert "Categorias cobertas: 2/4" in html
+    assert "Suspeito" in html and "Sim" in html
+    assert "Fácil 0/1" in html and "difícil 1/1" in html
+
+
+def test_detail_renders_zero_aggregates_and_explicit_empty_evidence(tmp_path):
+    zero = make_run("zero-aggregate")
+    zero.results = [
+        _aggregate_result("agentico-fail", "agentico", Difficulty.FACIL, passed=False),
+        _aggregate_result("ceticismo-fail", "ceticismo", Difficulty.DIFICIL, passed=False),
+    ]
+    empty = make_run("empty-aggregate")
+    db = make_db(tmp_path, [zero, empty])
+    client = gui_app.create_app(db).test_client()
+
+    zero_html = client.get("/runs/zero-aggregate").get_data(as_text=True)
+    empty_html = client.get("/runs/empty-aggregate").get_data(as_text=True)
+
+    assert "Média de aprovação agentico/ceticismo" in zero_html
+    assert "0,0%" in zero_html
+    assert "Categorias cobertas: 2/4" in zero_html
+    assert "Suspeito" in zero_html and "Não" in zero_html
+    assert "Base fácil e difícil disponível: Fácil 0/1 · difícil 0/1" in zero_html
+    assert "Risco" in empty_html and "indisponível" in empty_html
+    assert "Utilidade" in empty_html and "indisponível" in empty_html
+    assert "Não" in empty_html and "Evidência insuficiente" in empty_html
 
 
 @pytest.mark.parametrize(

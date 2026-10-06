@@ -62,7 +62,7 @@ def test_manual_suite_versions_and_signal_cases() -> None:
         suite = load_suite(ROOT / f"{name}.yaml")
         versions[name] = suite.version
         ids.update(case.id for case in suite.cases)
-    assert versions == {"code": 6, "obsidian": 6, "tools": 6, "skepticism": 5}
+    assert versions == {"code": 6, "obsidian": 6, "tools": 7, "skepticism": 5}
     assert RETIRED.isdisjoint(ids)
     assert SIGNAL <= ids
 
