@@ -94,6 +94,11 @@ workers paralelos. O campo legado `ttft_ms` guarda o tempo de processamento do
 prompt, não o tempo até o primeiro token. Em casos de dois turnos, tokens incluem
 os dois turnos enquanto a velocidade registrada corresponde ao segundo.
 
+O painel rejeita cabeçalhos `Host` externos; use `localhost` ou `127.0.0.1`.
+SQLite em modo WAL pode criar arquivos auxiliares mesmo em uma conexão somente
+leitura. Resultados e limites da revisão de segurança e memória estão em
+[docs/security-audit.md](docs/security-audit.md).
+
 ### Cloud (OpenRouter)
 
 O client aceita endpoints API: `BANCADA_ENDPOINT`/`--endpoint` apontando para o provedor, `BANCADA_API_KEY` (chave via env, nunca comitada), `BANCADA_MODEL` e `BANCADA_EXTRA_BODY` (ex.: `{"reasoning":{"exclude":true}}` para no-think). Retry com backoff em 429/5xx embutido. Os provedores podem **ignorar seed** — runs via API não são comparáveis ao local dígito a dígito.

@@ -94,3 +94,13 @@ Based on the final functional review at `09e2e6e7ab6a7c72bf91f725f03afa7bfb3cbc7
 All records used for this validation are synthetic. No model, inference call,
 network request, prompt, cap, or dependency was added. This scoped fix does not
 include the separate security audit.
+
+## Post-functional security fixes — 2026-10-06
+
+The subsequent audit and scoped Sol approval are recorded in
+[security-audit.md](security-audit.md). Runtime fixes at `4fd4c27` add an early
+loopback Host gate and handle deeply nested saved JSON as invalid entries.
+Independent final verification: 253 tests passed, Ruff/pip check/diff check clean.
+A fresh installed wheel exercised six normal HTTP paths, six hostile Host paths,
+and all three saved JSON targets, preserving synthetic DB bytes and reaping its
+owned server. These are local fixture results, not an inference benchmark.
