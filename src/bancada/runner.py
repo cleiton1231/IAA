@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from bancada.client import ChatError, ChatResult, Client
+from bancada.loader import suite_versions
 from bancada.models import Case, CaseResult, CheckOutcome, Run, Suite
 from bancada.scorers import _extract_tool_args, _extract_tools_from_text, _match_pattern, run_checks
 
@@ -184,7 +185,7 @@ def run_many(
     cases = [case for suite in suites for case in suite.cases]
     total = len(cases)
     results: list[CaseResult] = []
-    versions: dict[str, int] = {suite.name: suite.version for suite in suites}
+    versions = suite_versions(suites)
     effective_run_id = run_id or (resume_run.id if resume_run else uuid.uuid4().hex)
 
     existing: dict[str, CaseResult] = {}

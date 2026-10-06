@@ -58,6 +58,7 @@ class Case(BaseModel):
 class Suite(BaseModel):
     name: str
     version: int = 1
+    version_key: str | None = None
     category: str = ""
     cases: list[Case]
 

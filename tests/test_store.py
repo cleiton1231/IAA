@@ -2,8 +2,27 @@
 
 from pathlib import Path
 
+import pytest
+
 from bancada.models import CaseResult, CheckOutcome, Gabarito, Run, Stance
 from bancada.store import list_runs, load_run, save_run, save_scores
+
+
+def _resume_config(**overrides: object):
+    import bancada.store as store
+
+    config_type = getattr(store, "ResumeConfig", None)
+    assert config_type is not None, "store.ResumeConfig must be defined"
+    values = {
+        "endpoint": "http://127.0.0.1:8080/v1",
+        "seed": 42,
+        "temperature": 0.0,
+        "max_tokens": 512,
+        "timeout": 60.0,
+        "harness": "direct",
+    }
+    values.update(overrides)
+    return config_type(**values)
 
 
 def _run() -> Run:
@@ -64,6 +83,146 @@ def test_find_resumable_run(tmp_path: Path) -> None:
 
     # Mismatch version
     assert find_resumable_run(db, "toy-model", {"code": 2}) is None
+
+
+def test_run_suite_versions_round_trip_with_manual_and_imported_keys(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.suite_versions = {"code": 5, "imported/code": 1}
+    save_run(db, run)
+
+    loaded = load_run(db, run.id)
+
+    assert loaded is not None
+    assert loaded.suite_versions == {"code": 5, "imported/code": 1}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("endpoint", "http://127.0.0.1:8081/v1"),
+        ("seed", 43),
+        ("temperature", 0.5),
+        ("max_tokens", 256),
+        ("timeout", 30.0),
+        ("harness", "pi"),
+    ],
+)
+def test_resume_requires_requested_configuration(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    setattr(run, field, value)
+    save_run(db, run)
+    expected = _resume_config()
+
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_requires_exact_version_map_and_raw_harness(tmp_path: Path) -> None:
+    import sqlite3
+
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    save_run(db, run)
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE runs SET harness = NULL WHERE id = ?", (run.id,))
+    expected = _resume_config()
+
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1, "imported/code": 1}, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_returns_compatible_incomplete_run_and_retries_errors(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.results[0].error = "temporary endpoint error"
+    save_run(db, run)
+    expected = _resume_config()
+
+    found = find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse", "code.second"},
+        config=expected,
+    )
+    assert found is not None
+    assert found.id == run.id
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse"},
+        config=expected,
+    ) is not None
+    run.results[0].error = None
+    save_run(db, run)
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse"},
+        config=expected,
+    ) is None
+
+
+def test_explicit_resume_id_obeys_configuration_filters(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    save_run(db, run)
+    expected = _resume_config()
+
+    assert find_resumable_run(
+        db, "toy-model", {"code": 1}, run_id=run.id, config=expected
+    ) is not None
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1, "imported/code": 1},
+        run_id=run.id,
+        config=expected,
+    ) is None
 
 
 def test_list_runs_newest_first(tmp_path: Path) -> None:

@@ -11,11 +11,18 @@ from pathlib import Path
 
 from bancada.aggregate import format_enem_lines, summarize_run
 from bancada.client import Client
-from bancada.loader import load_named_suites
+from bancada.loader import load_named_suites, suite_versions
 from bancada.models import Run
 from bancada.packet import render_packet, render_packet_compact, write_auto_scores
 from bancada.runner import run_many
-from bancada.store import find_resumable_run, list_runs, load_run, save_run, save_scores
+from bancada.store import (
+    ResumeConfig,
+    find_resumable_run,
+    list_runs,
+    load_run,
+    save_run,
+    save_scores,
+)
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
 DEFAULT_TEMPERATURE = 0.0
@@ -280,7 +287,8 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
     total = sum(len(suite.cases) for suite in suites)
     c, health_model = _build_client(args, client)
     model_id = health_model
-    versions = {suite.name: suite.version for suite in suites}
+    versions = suite_versions(suites)
+    harness = getattr(args, "harness", "direct")
 
     resume_run = None
     if getattr(args, "resume", False):
@@ -290,12 +298,22 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
             model_id,
             versions,
             expected_case_ids=all_case_ids,
+            config=ResumeConfig(
+                endpoint=c.endpoint,
+                seed=args.seed,
+                temperature=args.temperature,
+                max_tokens=args.max_tokens,
+                timeout=args.timeout,
+                harness=harness,
+            ),
         )
         if resume_run:
             print(
                 f"resuming run {resume_run.id} ({len(resume_run.results)} cases loaded)",
                 flush=True,
             )
+        else:
+            print("no compatible resumable run found; starting a new run", flush=True)
 
     def on_progress(event: str, index: int, _total: int, case_id: str, *rest: object) -> None:
         if args.quiet:
@@ -321,7 +339,7 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         seed=args.seed,
         resume_run=resume_run,
         db_path=Path(args.db),
-        harness=getattr(args, "harness", "direct"),
+        harness=harness,
         workers=max(1, int(getattr(args, "workers", 1) or 1)),
     )
     save_run(Path(args.db), run)

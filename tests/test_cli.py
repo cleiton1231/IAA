@@ -268,6 +268,11 @@ def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
         model_id="toy-model",
         endpoint="http://127.0.0.1:8080/v1",
         suite_versions={"skepticism": 1},
+        max_tokens=512,
+        timeout=60.0,
+        temperature=0.0,
+        seed=42,
+        harness="direct",
         results=[
             CaseResult(
                 case_id="skepticism.python4-false-premise",
@@ -322,3 +327,50 @@ def test_run_prints_summary_and_supports_resume(tmp_path: Path, capsys) -> None:
     assert code2 == 0
     out2 = capsys.readouterr().out
     assert "resuming run" not in out2
+
+
+def test_resume_cli_starts_new_run_when_configuration_differs(
+    tmp_path: Path, capsys
+) -> None:
+    suites = tmp_path / "suites"
+    suites.mkdir()
+    (suites / "skepticism.yaml").write_text(SUITE, encoding="utf-8")
+    db = tmp_path / "bancada.sqlite"
+    from bancada.models import Run
+    from bancada.store import save_run
+
+    save_run(
+        db,
+        Run(
+            id="wrong-seed",
+            model_id="toy-model",
+            endpoint="http://127.0.0.1:8080/v1",
+            suite_versions={"skepticism": 1},
+            max_tokens=512,
+            timeout=60.0,
+            temperature=0.0,
+            seed=41,
+            harness="direct",
+        ),
+    )
+
+    code = main(
+        [
+            "run",
+            "--suites",
+            "skepticism",
+            "--suites-dir",
+            str(suites),
+            "--db",
+            str(db),
+            "--no-imported",
+            "--resume",
+        ],
+        client=_client(),
+    )
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "no compatible resumable run found; starting a new run" in out
+    assert "resuming run wrong-seed" not in out
+    assert len(list_runs(db)) == 2
