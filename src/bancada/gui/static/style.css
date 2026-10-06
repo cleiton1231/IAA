@@ -86,6 +86,9 @@ tbody tr:hover { background: #fbfcfa; }
 .row-note { display: block; color: var(--muted); font-size: .75rem; }
 .error-row { background: #fff9f8; }
 .chart-data-table { max-width: 850px; margin-inline: auto; }
+.chart-data-details { max-width: 850px; margin: .8rem auto 0; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfb; }
+.chart-data-details summary { color: var(--green-dark); cursor: pointer; font-size: .8rem; font-weight: 700; }
+.chart-data-details[open] summary { margin-bottom: .7rem; }
 .compare-picker { display: grid; grid-template-columns: minmax(190px, 1.2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto; align-items: end; gap: .75rem; margin: 1rem 0; padding: .9rem; border: 1px solid #dbe7de; border-radius: 10px; background: #f8fbf8; }
 .picker-copy strong, .picker-copy span { display: block; }
 .picker-copy strong { font-size: .87rem; }

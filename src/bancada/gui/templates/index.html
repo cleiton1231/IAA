@@ -32,7 +32,7 @@
         </svg>
         <figcaption>Velocidade é a mediana das medições gravadas; casos sem amostra não entram no gráfico.</figcaption>
       </figure>
-      <div class="table-wrap chart-data-table"><table><caption>Dados que formam o gráfico</caption><thead><tr><th scope="col">Modelo</th><th scope="col">Run</th><th scope="col">Aprovação automática</th><th scope="col">Velocidade p50</th></tr></thead><tbody>{% for point in points %}<tr><td>{{ point.model }}</td><td><a href="{{ point.url }}">{{ point.id }}</a></td><td>{{ point.rate }}</td><td>{{ point.speed }} tokens/s</td></tr>{% endfor %}</tbody></table></div>
+      <details class="chart-data-details"><summary>Ver tabela de dados do gráfico</summary><div class="table-wrap chart-data-table"><table><caption>Dados que formam o gráfico</caption><thead><tr><th scope="col">Modelo</th><th scope="col">Run</th><th scope="col">Aprovação automática</th><th scope="col">Velocidade p50</th></tr></thead><tbody>{% for point in points %}<tr><td>{{ point.model }}</td><td><a href="{{ point.url }}">{{ point.id }}</a></td><td>{{ point.rate }}</td><td>{{ point.speed }} tokens/s</td></tr>{% endfor %}</tbody></table></div></details>
     {% else %}<p class="empty-inline">Ainda não há runs nesta página com taxa automática e velocidade medidas.</p>{% endif %}
   </section>
   <section class="panel history-panel" aria-labelledby="history-title">

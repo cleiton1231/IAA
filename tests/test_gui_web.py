@@ -56,6 +56,17 @@ def test_history_detail_and_comparison_render_in_portuguese(tmp_path):
     assert b"s\xc3\xb3-b" in comparison.data
 
 
+def test_quality_speed_chart_table_is_available_in_collapsed_disclosure(tmp_path):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b'<details class="chart-data-details">' in response.data
+    assert b"Ver tabela de dados do gr\xc3\xa1fico" in response.data
+    assert b"Dados que formam o gr\xc3\xa1fico" in response.data
+
+
 def test_history_filters_and_pagination_keep_query_values(tmp_path):
     runs = [
         make_run(f"run-{index:02}", "Modelo A" if index % 2 else "Modelo B")
