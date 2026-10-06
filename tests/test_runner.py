@@ -367,7 +367,7 @@ def _multiturn_case_with_initial_checks() -> Case:
         turn1_machine_checks=[
             MachineCheck(type="tool_name", expected="exec"),
             MachineCheck(type="tool_args", pattern=r"\bcat\b.*python_version\.md"),
-            MachineCheck(type="must_not", pattern=r"\b(rm|mv|cp|touch)\b|>"),
+            MachineCheck(type="must_not", pattern=r"\b(rm|mv|cp|touch)\b"),
         ],
         machine_checks=[MachineCheck(type="tool_name", expected="exec")],
     )
@@ -449,7 +449,9 @@ def test_multiturn_text_fallback_checks_first_turn() -> None:
         ]
     )
     result = run_case(client, _multiturn_case_with_initial_checks())
-    assert any(check.turn == 1 and check.ok for check in result.checks)
+    initial_checks = [check for check in result.checks if check.turn == 1]
+    assert len(initial_checks) == 3
+    assert all(check.ok for check in initial_checks)
     assert client.call_count == 2
 
 

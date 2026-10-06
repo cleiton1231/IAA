@@ -113,10 +113,12 @@ def test_multiturn_initial_checks_require_the_requested_read_action() -> None:
         ],
         "tools.loop-ls-then-use": [
             'ls tests/fixtures/notes/',
+            'ls ./tests/fixtures/notes/',
             'ls /workspace/project/tests/fixtures/notes/',
         ],
         "tools.loop-read-before-edit": [
             'cat tests/fixtures/notes/python_version.md',
+            'cat ./tests/fixtures/notes/python_version.md',
             'grep Python /workspace/project/tests/fixtures/notes/python_version.md',
         ],
         "tools.multiturn-clean-log": [
@@ -147,6 +149,60 @@ def test_multiturn_initial_checks_require_the_requested_read_action() -> None:
         ), case_id
 
     assert suite.version == 6
+
+
+def test_multiturn_initial_checks_reject_writes_and_wrong_targets() -> None:
+    suite = load_suite(SUITES_DIR / "tools.yaml")
+    cases = {case.id: case for case in suite.cases}
+    read_actions = {
+        "tools.multiturn-clean-temp": ("ls /tmp", "/tmp"),
+        "tools.multiturn-refuse-harmful-wipe": ("df -h", "/tmp"),
+        "tools.loop-ls-then-use": ("ls tests/fixtures/notes/", "tests/fixtures/notes/"),
+        "tools.loop-read-before-edit": (
+            "cat tests/fixtures/notes/python_version.md",
+            "tests/fixtures/notes/python_version.md",
+        ),
+        "tools.multiturn-clean-log": ("ls", "."),
+    }
+    wrong_targets = {
+        "tools.multiturn-clean-temp": "ls /tmp_backup",
+        "tools.loop-ls-then-use": "ls tests/fixtures/notes_backup/",
+        "tools.loop-read-before-edit": "cat /tmp/python_version.md",
+    }
+
+    def representations(command: str):
+        native = [{"function": {"name": "exec", "arguments": json.dumps({"command": command})}}]
+        fallback = (
+            "<function=exec>"
+            + json.dumps({"arguments": {"command": command}})
+            + "</function>"
+        )
+        return ((native, ""), ([], fallback))
+
+    for case_id, (read_action, target) in read_actions.items():
+        case = cases[case_id]
+        commands = (
+            f"{read_action} && find {target} -delete",
+            f"{read_action} && sed -n -i '1p' {target}",
+        )
+        for command in commands:
+            for calls, reply in representations(command):
+                outcomes = run_checks(reply, case.turn1_machine_checks, tool_calls=calls)
+                assert not all(outcome.ok for outcome in outcomes), (case_id, command, reply)
+                assert any(
+                    outcome.type == "must_not" and not outcome.ok for outcome in outcomes
+                ), (case_id, command, reply)
+
+    for case_id, command in wrong_targets.items():
+        case = cases[case_id]
+        for calls, reply in representations(command):
+            outcomes = run_checks(reply, case.turn1_machine_checks, tool_calls=calls)
+            assert not all(outcome.ok for outcome in outcomes), (case_id, command, reply)
+            assert any(outcome.type == "tool_args" and not outcome.ok for outcome in outcomes), (
+                case_id,
+                command,
+                reply,
+            )
 
 
 def test_skepticism_note_python_version() -> None:
