@@ -472,6 +472,39 @@ def test_second_turn_error_preserves_first_turn_checks() -> None:
     assert client.call_count == 2
 
 
+def test_cron_out_of_range_offsets_record_case_failure_without_aborting() -> None:
+    from pathlib import Path
+
+    from bancada.client import ChatResult
+    from bancada.loader import load_suite
+    from bancada.runner import run_case
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    for value in (
+        "0001-01-01T00:00:00+01:00",
+        "9999-12-31T23:59:59-01:00",
+    ):
+        response = ChatResult(
+            text="",
+            tool_calls=[
+                {
+                    "function": {
+                        "name": "cron",
+                        "arguments": {"at": value, "message": "Revisar ponteiros"},
+                    }
+                }
+            ],
+        )
+        client = _ChatSequence([response])
+
+        result = run_case(client, case)
+
+        assert result.error is None
+        assert result.fail_class != "ok"
+        assert not all(check.ok for check in result.checks)
+
+
 def test_case_initial_checks_default_and_check_turn_round_trip() -> None:
     from bancada.models import CheckOutcome
 

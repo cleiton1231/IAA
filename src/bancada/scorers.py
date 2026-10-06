@@ -161,20 +161,29 @@ def _argument_object(arguments: Any) -> dict[str, Any] | None:
 def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]:
     values: list[Any] = []
     decoder = json.JSONDecoder()
-    for match in re.finditer(r"\{", reply or ""):
+    text = reply or ""
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor] not in "{[":
+            cursor += 1
+            continue
         try:
-            parsed, _ = decoder.raw_decode(reply, match.start())
+            parsed, end = decoder.raw_decode(text, cursor)
         except (json.JSONDecodeError, RecursionError):
+            cursor += 1
             continue
-        if not isinstance(parsed, dict):
-            continue
-        function = parsed.get("function")
-        source = function if isinstance(function, dict) else parsed
-        if source.get("name") != tool_name:
-            continue
-        arguments = _argument_object(source.get("arguments"))
-        if arguments is not None and field in arguments:
-            values.append(arguments[field])
+        candidates = parsed if isinstance(parsed, list) else [parsed]
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            function = candidate.get("function")
+            source = function if isinstance(function, dict) else candidate
+            if source.get("name") != tool_name:
+                continue
+            arguments = _argument_object(source.get("arguments"))
+            if arguments is not None and field in arguments:
+                values.append(arguments[field])
+        cursor = end
     function_pattern = (
         r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
         + re.escape(tool_name)
@@ -203,19 +212,19 @@ def _iso_datetimes_match(candidate: str, expected: str) -> bool:
 
 def _parse_iso_datetime(value: str) -> datetime | None:
     if not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?"
-        r"(?:Z|[+-]\d{2}:\d{2})?",
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+        r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?",
         value,
     ):
         return None
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
         parsed = datetime.fromisoformat(normalized)
-    except ValueError:
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def _cron_relative_at(text: str, pattern: str) -> bool:
