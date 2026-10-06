@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ _CONFIG_LABELS = {
     "timeout": "timeout",
     "harness": "harness",
 }
+_LOOPBACK_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.IGNORECASE)
 
 
 def _timestamp(value: int | None) -> str:
@@ -175,6 +177,16 @@ def _judge_reason(run: Run, case_id: str) -> str:
     return ""
 
 
+def _is_loopback_authority(authority: str | None) -> bool:
+    if not authority:
+        return False
+    match = _LOOPBACK_HOST.fullmatch(authority)
+    if match is None:
+        return False
+    port = match.group(1)
+    return port is None or _PORT_MIN <= int(port) <= _PORT_MAX
+
+
 def create_app(db_path: Path) -> Flask:
     """Create the read-only dashboard and validate its database before serving."""
     database = Path(db_path).expanduser().resolve()
@@ -184,6 +196,12 @@ def create_app(db_path: Path) -> Flask:
     app.add_template_filter(_timestamp, "timestamp")
     app.add_template_filter(_percent, "percent")
     app.add_template_filter(_number, "number")
+
+    @app.before_request
+    def validate_host():
+        if not _is_loopback_authority(request.environ.get("HTTP_HOST")):
+            return _error("Host inválido", "Use localhost ou 127.0.0.1 para acessar o painel.", 400)
+        return None
 
     @app.get("/")
     def history():

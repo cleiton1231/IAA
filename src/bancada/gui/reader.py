@@ -157,7 +157,7 @@ def _entry(
         run = Run(**run_data)
         entry.run = run
         return entry
-    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+    except (ValueError, TypeError, json.JSONDecodeError, RecursionError) as exc:
         metadata = _run_row(conn, run_id, run_columns)
         if metadata is None:
             return None
@@ -243,7 +243,7 @@ def read_page(
             if suite:
                 try:
                     versions = json.loads(metadata.get("suite_versions") or "{}")
-                except (TypeError, json.JSONDecodeError):
+                except (TypeError, json.JSONDecodeError, RecursionError):
                     versions = None
                 if not isinstance(versions, Mapping):
                     # Keep records with unusable suite metadata visible as invalid

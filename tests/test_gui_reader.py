@@ -75,6 +75,55 @@ def test_corrupt_payload_is_visible(tmp_path):
     assert entry.error
 
 
+def _deep_json_array(depth=10_000):
+    return "[" * depth + "0" + "]" * depth
+
+
+@pytest.mark.parametrize("target", ["result", "judge_scores", "suite_versions"])
+def test_deep_saved_json_is_returned_as_invalid_entry(tmp_path, target):
+    db = make_db(tmp_path, [make_run("broken"), make_run("valid")])
+    deep_json = _deep_json_array()
+    with sqlite3.connect(db) as conn:
+        if target == "result":
+            conn.execute(
+                "INSERT INTO case_results (run_id, seq, payload) VALUES (?, ?, ?)",
+                ("broken", 0, deep_json),
+            )
+        elif target == "judge_scores":
+            conn.execute(
+                "INSERT INTO judge_scores (run_id, payload) VALUES (?, ?)",
+                ("broken", deep_json),
+            )
+        else:
+            conn.execute("UPDATE runs SET suite_versions = ? WHERE id = 'broken'", (deep_json,))
+    before = db.read_bytes()
+
+    entry = read_run(db, "broken")
+    page = read_page(db)
+
+    assert entry.run is None
+    assert "Invalid run data" in entry.error
+    assert {item.id for item in page.entries} == {"broken", "valid"}
+    assert next(item for item in page.entries if item.id == "valid").run is not None
+    assert next(item for item in page.entries if item.id == "broken").run is None
+    assert db.read_bytes() == before
+
+
+def test_deep_suite_metadata_remains_visible_when_filtering_history(tmp_path):
+    db = make_db(tmp_path, [make_run("broken"), make_run("valid")])
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "UPDATE runs SET suite_versions = ? WHERE id = 'broken'", (_deep_json_array(),)
+        )
+
+    page = read_page(db, suite="skepticism")
+
+    assert page.total == 2
+    assert {entry.id for entry in page.entries} == {"broken", "valid"}
+    assert next(entry for entry in page.entries if entry.id == "broken").run is None
+    assert next(entry for entry in page.entries if entry.id == "valid").run is not None
+
+
 @pytest.mark.parametrize("malformed_versions", ["null", "[]", "42", "true"])
 def test_suite_filter_keeps_malformed_suite_metadata_visible(tmp_path, malformed_versions):
     db = make_db(tmp_path, [make_run()])

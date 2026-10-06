@@ -61,6 +61,89 @@ def test_history_detail_and_comparison_render_in_portuguese(tmp_path):
     assert b"s\xc3\xb3-b" in comparison.data
 
 
+@pytest.mark.parametrize(
+    "url",
+    ["/", "/runs/run-a", "/compare?a=run-a&b=run-b", "/static/style.css"],
+)
+def test_external_host_is_rejected_before_reading_database(tmp_path, monkeypatch, url):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    def unexpected_read(*args, **kwargs):
+        raise AssertionError("a rejected Host must not reach a database reader")
+
+    monkeypatch.setattr(gui_app, "read_page", unexpected_read)
+    monkeypatch.setattr(gui_app, "read_run", unexpected_read)
+
+    response = client.get(url, headers={"Host": "rebind-fixture.invalid"})
+
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("host", ["localhost", "localhost:8765", "127.0.0.1", "127.0.0.1:8765"])
+def test_loopback_host_authorities_are_accepted(tmp_path, host):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    response = client.get("/", headers={"Host": host})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "localhost.evil.invalid",
+        "127.0.0.1.evil.invalid",
+        "localhost:",
+        "localhost:0",
+        "localhost:65536",
+        "localhost:abc",
+        "localhost:8765.evil.invalid",
+        "localhost:8765:80",
+        "localhost/evil",
+    ],
+)
+def test_malformed_or_non_loopback_authorities_are_rejected(tmp_path, host):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    response = client.get("/", headers={"Host": host})
+
+    assert response.status_code == 400
+
+
+def test_forwarded_host_does_not_override_host_validation(tmp_path):
+    client = gui_app.create_app(make_db(tmp_path, _runs())).test_client()
+
+    external_host = client.get(
+        "/", headers={"Host": "rebind-fixture.invalid", "X-Forwarded-Host": "localhost"}
+    )
+    external_forwarded = client.get(
+        "/", headers={"Host": "localhost", "X-Forwarded-Host": "rebind-fixture.invalid"}
+    )
+
+    assert external_host.status_code == 400
+    assert external_forwarded.status_code == 200
+
+
+def test_deep_result_json_stays_visible_in_history_and_returns_422_in_run_views(tmp_path):
+    db = make_db(tmp_path, [make_run("broken"), make_run("valid")])
+    deep_json = "[" * 10_000 + "0" + "]" * 10_000
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "INSERT INTO case_results (run_id, seq, payload) VALUES (?, ?, ?)",
+            ("broken", 0, deep_json),
+        )
+    client = gui_app.create_app(db).test_client()
+
+    history = client.get("/")
+    detail = client.get("/runs/broken")
+    comparison = client.get("/compare?a=broken&b=valid")
+
+    assert history.status_code == 200
+    assert b"Invalid run data" in history.data
+    assert detail.status_code == 422
+    assert comparison.status_code == 422
+
+
 def test_historical_humaneval_provenance_warns_after_save_read_and_render(tmp_path):
     suites = load_named_suites(
         Path(__file__).parents[1] / "suites",
