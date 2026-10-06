@@ -231,11 +231,16 @@ def _outside_fenced_code(reply: str) -> str:
 
 
 def _markdown_h1(reply: str, expected: str | None) -> CheckResult:
-    text = _outside_fenced_code(reply)
-    headings = re.findall(
-        r"^\s{0,3}#(?!#)\s+(.+?)\s*#*\s*$", text, re.MULTILINE
-    )
-    titles = [re.sub(r"\s+#+\s*$", "", title).strip() for title in headings]
+    lines = _outside_fenced_code(reply).splitlines()
+    titles: list[str] = []
+    for index, line in enumerate(lines):
+        atx = re.match(r"^\s{0,3}#(?!#)\s+(.+?)\s*#*\s*$", line)
+        if atx:
+            titles.append(atx.group(1))
+        elif index + 1 < len(lines) and re.match(r"^\s{0,3}=+\s*$", lines[index + 1]):
+            if line.strip():
+                titles.append(line.strip())
+    titles = [_visible_markdown_text(title) for title in titles]
     if expected is None:
         ok = bool(titles)
     else:
@@ -244,31 +249,54 @@ def _markdown_h1(reply: str, expected: str | None) -> CheckResult:
     return CheckResult("markdown_h1", ok, reason)
 
 
+def _visible_markdown_text(text: str) -> str:
+    text = re.sub(r"\s+#+\s*$", "", text).strip()
+    text = re.sub(r"(\*\*|__|\*|_)(.*?)\1", r"\2", text)
+    return text.strip()
+
+
 def _flashcard_pairs(reply: str, expected: str) -> CheckResult:
     try:
         wanted = int(expected)
     except (TypeError, ValueError):
         return CheckResult("flashcard_pairs", False, f"invalid pair count: {expected}")
-    questions = re.compile(r"^(?:\*\*)?(?:pergunta|quest[aã]o|q)(?:\*\*)?\s*:", re.IGNORECASE)
-    answers = re.compile(r"^(?:\*\*)?(?:resposta|answer|a)(?:\*\*)?\s*:", re.IGNORECASE)
-    pairs = 0
-    awaiting_answer = False
+    questions = re.compile(r"^(?:pergunta|quest[aã]o|q)\s*:(.*)$", re.IGNORECASE)
+    answers = re.compile(r"^(?:resposta|answer|a)\s*:(.*)$", re.IGNORECASE)
+    cards: list[dict[str, list[str] | None]] = []
+    current: dict[str, list[str] | None] | None = None
+    section: str | None = None
     malformed = False
     for line in _outside_fenced_code(reply).splitlines():
         line = re.sub(r"^\s*(?:(?:[-+*])\s+|\d+[.)]\s+)", "", line).strip()
         line = line.replace("**", "").replace("__", "").strip()
-        if questions.match(line):
-            if awaiting_answer:
-                malformed = True
-            awaiting_answer = True
-        elif answers.match(line):
-            if not awaiting_answer:
+        question = questions.match(line)
+        answer = answers.match(line)
+        if question:
+            if current is not None:
+                if current["answer"] is None:
+                    malformed = True
+                cards.append(current)
+            current = {"question": [question.group(1).strip()], "answer": None}
+            section = "question"
+        elif answer:
+            if current is None or current["answer"] is not None:
                 malformed = True
             else:
-                pairs += 1
-                awaiting_answer = False
-    ok = pairs == wanted and not awaiting_answer and not malformed
-    reason = "" if ok else f"expected {wanted} complete Pergunta/Resposta pairs, got {pairs}"
+                current["answer"] = [answer.group(1).strip()]
+                section = "answer"
+        elif current is not None and line:
+            body = current[section] if section else None
+            if body is not None:
+                body.append(line)
+    if current is not None:
+        cards.append(current)
+    complete = all(
+        bool(" ".join(card["question"] or []).strip())
+        and bool(" ".join(card["answer"] or []).strip())
+        for card in cards
+    )
+    ok = len(cards) == wanted and complete and not malformed
+    reason = "" if ok else f"expected {wanted} complete Pergunta/Resposta pairs, got {len(cards)}"
     return CheckResult("flashcard_pairs", ok, reason)
 
 

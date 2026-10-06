@@ -162,6 +162,13 @@ def test_obsidian_incomplete_reply_fails_and_markdown_variants_pass() -> None:
         results = run_checks(reply, cases[case_id].machine_checks)
         assert all(result.ok for result in results), case_id
 
+    diary_checks = cases["obsidian.diario"].machine_checks
+    for reply in (
+        "2026-09-10\n==========\n[[DocMind]]",
+        "# **2026-09-10**\n[[DocMind]]",
+    ):
+        assert all(result.ok for result in run_checks(reply, diary_checks))
+
     flashcards = cases["obsidian.flashcards"].machine_checks
     assert not all(
         result.ok for result in run_checks("Pergunta: só uma\nResposta: incompleto", flashcards)
@@ -170,6 +177,24 @@ def test_obsidian_incomplete_reply_fails_and_markdown_variants_pass() -> None:
     assert not all(
         result.ok for result in run_checks(fenced_h1, cases["obsidian.diario"].machine_checks)
     )
+
+
+def test_flashcard_pairs_require_nonempty_question_and_answer_bodies() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).resolve().parents[1] / "suites" / "obsidian.yaml")
+    case = next(case for case in suite.cases if case.id == "obsidian.flashcards")
+    empty_cards = "Pergunta:\nResposta:\n" * 3
+    assert not all(result.ok for result in run_checks(empty_cards, case.machine_checks))
+
+    continued_cards = (
+        "Pergunta:\n  O que é ponteiro?\nResposta:\n  Um endereço.\n"
+        "Pergunta: O que malloc faz?\nResposta: Aloca memória.\n"
+        "Pergunta: O que free faz?\nResposta: Devolve memória."
+    )
+    assert all(result.ok for result in run_checks(continued_cards, case.machine_checks))
 
 
 def test_tool_name_matches_openai_tool_calls() -> None:

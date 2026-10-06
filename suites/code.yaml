@@ -369,6 +369,7 @@ cases:
           assert parse_ymd("2026-9-1") is None
           assert parse_ymd("2026-02-31") is None
           assert parse_ymd("2026-00-10") is None
+          assert parse_ymd("2026-01-00") is None
           assert parse_ymd("2026-01-32") is None
           assert parse_ymd("2024-02-29") == (2024, 2, 29)
           assert parse_ymd("2000-02-29") == (2000, 2, 29)
