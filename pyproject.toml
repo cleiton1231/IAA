@@ -19,12 +19,18 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
 ]
+gui = [
+    "Flask>=3.0,<4",
+]
 
 [project.scripts]
 bancada = "bancada.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"bancada.gui" = ["templates/*.html", "static/*"]
 
 [tool.ruff]
 line-length = 100

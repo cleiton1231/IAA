@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Histórico de runs · Bancada{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <p class="eyebrow">PAINEL DE CONSULTA</p>
+  <h1>Histórico de runs</h1>
+  <p>Explore os resultados que já estão no banco e compare dois runs. Esta tela não inicia avaliações.</p>
+</section>
+<section class="panel filter-panel" aria-labelledby="filter-title">
+  <div class="section-heading compact-heading"><div><p class="eyebrow">BUSCA</p><h2 id="filter-title">Filtrar histórico</h2></div><span class="muted">{{ page.total }} encontrados · página {{ page.page }} de {{ page_count }}</span></div>
+  <form class="filter-grid" method="get" action="{{ url_for('history') }}">
+    <div class="field"><label for="filter-model">Modelo</label><input id="filter-model" type="search" name="model" value="{{ model }}" placeholder="Parte do nome"></div>
+    <div class="field"><label for="filter-suite">Suíte</label><input id="filter-suite" type="text" name="suite" value="{{ suite }}" placeholder="Nome exato da suíte"></div>
+    <div class="field"><label for="filter-seed">Seed</label><input id="filter-seed" type="number" name="seed" value="{{ seed }}" inputmode="numeric"></div>
+    <div class="filter-actions"><button class="button button-primary" type="submit">Aplicar filtros</button><a class="button button-quiet" href="{{ url_for('history') }}">Limpar</a></div>
+  </form>
+</section>
+{% if entries %}
+  <section class="panel chart-panel" aria-labelledby="chart-title">
+    <div class="section-heading"><div><p class="eyebrow">PÁGINA ATUAL</p><h2 id="chart-title">Qualidade automática e velocidade</h2></div><p class="muted">Cada ponto representa um run com as duas medidas registradas.</p></div>
+    {% if points %}
+      <figure class="scatter-figure">
+        <svg class="scatter-chart" viewBox="0 0 640 315" role="img" aria-labelledby="scatter-title scatter-desc">
+          <title id="scatter-title">Aprovação automática versus velocidade mediana</title>
+          <desc id="scatter-desc">O eixo horizontal mostra a taxa automática; o vertical mostra tokens por segundo. Velocidades nesta página vão de {{ speed_min }} a {{ speed_max }} tokens por segundo.</desc>
+          <line class="chart-axis" x1="52" y1="260" x2="590" y2="260"></line><line class="chart-axis" x1="52" y1="45" x2="52" y2="260"></line>
+          <line class="chart-gridline" x1="52" y1="152" x2="590" y2="152"></line><line class="chart-gridline" x1="321" y1="45" x2="321" y2="260"></line>
+          <text class="chart-tick" x="52" y="281">0%</text><text class="chart-tick" x="309" y="281">50%</text><text class="chart-tick" x="570" y="281">100%</text>
+          <text class="chart-axis-label" x="250" y="307">Aprovação automática</text><text class="chart-axis-label" transform="translate(16 220) rotate(-90)">tokens/s p50</text>
+          <text class="chart-tick" x="55" y="42">{{ speed_max }}</text><text class="chart-tick" x="55" y="254">{{ speed_min }}</text>
+          {% for point in points %}<a href="{{ point.url }}" aria-label="{{ point.model }}, run {{ point.id }}, aprovação {{ point.rate }}, velocidade {{ point.speed }} tokens por segundo"><circle class="chart-point" cx="{{ point.cx }}" cy="{{ point.cy }}" r="7"><title>{{ point.model }} · {{ point.id }} · {{ point.rate }} · {{ point.speed }} tokens/s</title></circle></a>{% endfor %}
+        </svg>
+        <figcaption>Velocidade é a mediana das medições gravadas; casos sem amostra não entram no gráfico.</figcaption>
+      </figure>
+      <details class="chart-data-details"><summary>Ver tabela de dados do gráfico</summary><div class="table-wrap chart-data-table"><table><caption>Dados que formam o gráfico</caption><thead><tr><th scope="col">Modelo</th><th scope="col">Run</th><th scope="col">Aprovação automática</th><th scope="col">Velocidade p50</th></tr></thead><tbody>{% for point in points %}<tr><td>{{ point.model }}</td><td><a href="{{ point.url }}">{{ point.id }}</a></td><td>{{ point.rate }}</td><td>{{ point.speed }} tokens/s</td></tr>{% endfor %}</tbody></table></div></details>
+    {% else %}<p class="empty-inline">Ainda não há runs nesta página com taxa automática e velocidade medidas.</p>{% endif %}
+  </section>
+  <section class="panel history-panel" aria-labelledby="history-title">
+    <div class="section-heading"><div><p class="eyebrow">RESULTADOS</p><h2 id="history-title">Runs registrados</h2></div><span class="muted">O timestamp é o valor gravado no banco.</span></div>
+    {% if compare_choices|length > 1 %}
+      <form class="compare-picker" method="get" action="{{ url_for('comparison') }}">
+        <div class="picker-copy"><strong>Comparar dois runs desta página</strong><span>Os resultados serão alinhados pelo ID do caso.</span></div>
+        <div class="field picker-field"><label for="compare-a">Run A</label><select name="a" id="compare-a" required>{% for choice in compare_choices %}<option value="{{ choice.id }}"{% if loop.first %} selected{% endif %}>{{ choice.model_id }} · {{ choice.id }}</option>{% endfor %}</select></div>
+        <div class="field picker-field"><label for="compare-b">Run B</label><select name="b" id="compare-b" required>{% for choice in compare_choices %}<option value="{{ choice.id }}"{% if loop.index == 2 %} selected{% endif %}>{{ choice.model_id }} · {{ choice.id }}</option>{% endfor %}</select></div>
+        <button class="button button-primary" type="submit">Comparar</button>
+      </form>
+    {% endif %}
+    <div class="table-wrap"><table class="history-table"><caption>Runs da página {{ page.page }}. Aprovação automática exige checks presentes e aprovados.</caption><thead><tr><th scope="col">Modelo e run</th><th scope="col">Timestamp registrado</th><th scope="col">Casos registrados</th><th scope="col">Aprovação automática</th><th scope="col">Juiz</th><th scope="col">Velocidade p50</th><th scope="col">Seed</th></tr></thead>
+      <tbody>{% for item in entries %}{% set entry = item.entry %}{% if item.error %}
+        <tr class="error-row"><th scope="row"><a href="{{ url_for('run_detail', run_id=entry.id) }}">{{ entry.model_id }} · {{ entry.id[:10] }}…</a><span class="row-note">Dados deste run precisam ser conferidos.</span></th><td>{{ entry.created_at|timestamp }}</td><td colspan="5">Erro ao ler: {{ item.error }}</td></tr>
+      {% else %}{% set metrics = item.metrics %}
+        <tr><th scope="row"><a href="{{ url_for('run_detail', run_id=entry.id) }}">{{ entry.model_id }}</a><span class="run-id">{{ entry.id[:10] }}…</span></th><td>{{ entry.created_at|timestamp }}</td><td>{{ metrics.total }}</td><td>{{ metrics.machine_rate|percent }} <span class="subvalue">{{ metrics.passed }}/{{ metrics.total }}</span></td>
+          <td>{% if metrics.judge_mean is none %}<span class="muted">sem notas</span>{% else %}{{ metrics.judge_mean|number(2) }}/3 <span class="subvalue">{{ metrics.judge_count }} casos</span>{% endif %}</td>
+          <td>{% if metrics.tps_p50 is none %}<span class="muted">indisponível</span>{% else %}{{ metrics.tps_p50|number }} <span class="subvalue">tokens/s · {{ metrics.tps_count }} amostras</span>{% endif %}</td>
+          <td>{% if 'seed' in entry.run.model_fields_set and entry.run.seed is not none %}{{ entry.run.seed }}{% else %}<span class="muted">não registrado</span>{% endif %}</td></tr>
+      {% endif %}{% endfor %}</tbody>
+    </table></div>
+    <nav class="pagination" aria-label="Paginação do histórico">
+      {% if page.page > 1 %}<a class="button button-quiet" href="{{ url_for('history', page=page.page - 1, model=model or none, suite=suite or none, seed=seed or none) }}">← Mais recentes</a>{% else %}<span></span>{% endif %}
+      <span>Página {{ page.page }} de {{ page_count }}</span>
+      {% if page.page < page_count %}<a class="button button-quiet" href="{{ url_for('history', page=page.page + 1, model=model or none, suite=suite or none, seed=seed or none) }}">Mais antigos →</a>{% else %}<span></span>{% endif %}
+    </nav>
+  </section>
+{% else %}
+  {% if empty_state == 'filters' %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">⌕</span><p class="eyebrow">SEM RESULTADOS</p><h2 id="empty-title">Nenhum run corresponde aos filtros</h2><p>Ajuste os filtros ou limpe a busca para consultar o histórico.</p><a class="button button-primary" href="{{ url_for('history') }}">Limpar filtros</a></section>
+  {% elif empty_state == 'page' %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">↗</span><p class="eyebrow">FIM DO HISTÓRICO</p><h2 id="empty-title">Nenhum run nesta página</h2><p>Você está além da última página. Há {{ page.total }} runs que correspondem aos filtros.</p><a class="button button-primary" href="{{ url_for('history', page=page_count, model=model or none, suite=suite or none, seed=seed or none) }}">Ir à última página</a></section>
+  {% else %}
+    <section class="empty-state panel" aria-labelledby="empty-title"><span class="empty-icon" aria-hidden="true">◷</span><p class="eyebrow">HISTÓRICO VAZIO</p><h2 id="empty-title">Nenhum run registrado</h2><p>Quando a Bancada gravar uma avaliação, ela aparecerá aqui. Este painel não executa modelos.</p></section>
+  {% endif %}
+{% endif %}
+{% endblock %}

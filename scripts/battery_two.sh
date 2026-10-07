@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 DIR="${HOME}/.grok/long-running-background-tasks"
 SUITES="skepticism,code,obsidian,tools"
-mkdir -p "$DIR" reports data
 
 declare -A SCRIPT=(
   [ornith]="start_llama_ornith.sh"
@@ -16,6 +15,13 @@ declare -A GGUF=(
   [ornith]="/home/cleiton/local/models/ornith-1.5-9b-q8/Ornith-1.5-9B-Q8_0.gguf"
   [qwen35-9b-q8]="/home/cleiton/local/models/qwen3.5-9b-q8/Qwen3.5-9B-Q8_0.gguf"
 )
+
+# Launchers são requisitos locais e devem existir antes de criar saídas ou parar servidores.
+if ! ./scripts/check_launchers.sh "scripts/${SCRIPT[ornith]}" "scripts/${SCRIPT[qwen35-9b-q8]}"; then
+  exit 1
+fi
+
+mkdir -p "$DIR" reports data
 
 # checa GGUFs antes de qualquer coisa
 for id in ornith qwen35-9b-q8; do

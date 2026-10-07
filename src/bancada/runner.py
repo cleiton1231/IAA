@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from bancada.client import ChatError, ChatResult, Client
+from bancada.loader import suite_versions
 from bancada.models import Case, CaseResult, CheckOutcome, Run, Suite
 from bancada.scorers import _extract_tool_args, _extract_tools_from_text, _match_pattern, run_checks
 
@@ -140,6 +141,31 @@ def _finalize_result(
     return result
 
 
+def _check_outcomes(
+    reply: str,
+    checks: list[Any],
+    tool_calls: list[dict[str, Any]] | None,
+    turn: int | None = None,
+) -> list[CheckOutcome]:
+    return [
+        CheckOutcome(type=check.type, ok=check.ok, reason=check.reason, turn=turn)
+        for check in run_checks(reply, checks, tool_calls)
+    ]
+
+
+def _apply_initial_failure_reason(
+    result: CaseResult,
+    reply: str,
+    tool_calls: list[dict[str, Any]] | None,
+    checks: list[CheckOutcome],
+) -> None:
+    if result.error or not checks or all(check.ok for check in checks):
+        return
+    fail_class = classify_fail(reply, tool_calls, checks)
+    result.fail_class = fail_class
+    result.fail_reason = classify_fail_reason(reply, tool_calls, checks, fail_class)
+
+
 def run_suite(
     client: Client,
     suite: Suite,
@@ -184,7 +210,7 @@ def run_many(
     cases = [case for suite in suites for case in suite.cases]
     total = len(cases)
     results: list[CaseResult] = []
-    versions: dict[str, int] = {suite.name: suite.version for suite in suites}
+    versions = suite_versions(suites)
     effective_run_id = run_id or (resume_run.id if resume_run else uuid.uuid4().hex)
 
     existing: dict[str, CaseResult] = {}
@@ -299,6 +325,8 @@ def run_case(
     seed: int | None = None,
 ) -> CaseResult:
     started = time.perf_counter()
+    chat1: ChatResult | None = None
+    turn1_checks: list[CheckOutcome] = []
     try:
         if case.fake_tool_response is not None:
             chat1 = client.chat(
@@ -309,6 +337,9 @@ def run_case(
                 max_tokens=max_tokens,
                 temperature=temperature,
                 seed=seed,
+            )
+            turn1_checks = _check_outcomes(
+                chat1.text, case.turn1_machine_checks, chat1.tool_calls, turn=1
             )
             tools_in_text = _extract_tools_from_text(chat1.text)
             has_tool = bool(chat1.tool_calls) or bool(tools_in_text)
@@ -359,10 +390,10 @@ def run_case(
                     seed=seed,
                 )
                 elapsed_ms = (time.perf_counter() - started) * 1000
-                checks = [
-                    CheckOutcome(type=c.type, ok=c.ok, reason=c.reason)
-                    for c in run_checks(chat2.text, case.machine_checks, chat2.tool_calls)
-                ]
+                final_checks = _check_outcomes(
+                    chat2.text, case.machine_checks, chat2.tool_calls, turn=2
+                )
+                checks = [*turn1_checks, *final_checks]
                 metrics = _metrics_from_chat(chat2)
                 metrics["prompt_tokens"] = _sum_tokens(
                     chat1.prompt_tokens, chat2.prompt_tokens
@@ -387,13 +418,17 @@ def run_case(
                     gabarito=case.gabarito,
                     **metrics,
                 )
-                return _finalize_result(result, chat2.text, chat2.tool_calls, checks, case)
+                result = _finalize_result(result, chat2.text, chat2.tool_calls, checks, case)
+                _apply_initial_failure_reason(
+                    result, chat1.text, chat1.tool_calls, turn1_checks
+                )
+                return result
             else:
                 elapsed_ms = (time.perf_counter() - started) * 1000
-                checks = [
-                    CheckOutcome(type=c.type, ok=c.ok, reason=c.reason)
-                    for c in run_checks(chat1.text, case.machine_checks, chat1.tool_calls)
-                ]
+                final_checks = _check_outcomes(
+                    chat1.text, case.machine_checks, chat1.tool_calls
+                )
+                checks = [*turn1_checks, *final_checks]
                 result = CaseResult(
                     case_id=case.id,
                     suite=case.suite,
@@ -407,7 +442,11 @@ def run_case(
                     gabarito=case.gabarito,
                     **_metrics_from_chat(chat1),
                 )
-                return _finalize_result(result, chat1.text, chat1.tool_calls, checks, case)
+                result = _finalize_result(result, chat1.text, chat1.tool_calls, checks, case)
+                _apply_initial_failure_reason(
+                    result, chat1.text, chat1.tool_calls, turn1_checks
+                )
+                return result
         else:
             chat = client.chat(
                 messages=[{"role": "user", "content": case.prompt}],
@@ -419,10 +458,7 @@ def run_case(
                 seed=seed,
             )
             elapsed_ms = (time.perf_counter() - started) * 1000
-            checks = [
-                CheckOutcome(type=c.type, ok=c.ok, reason=c.reason)
-                for c in run_checks(chat.text, case.machine_checks, chat.tool_calls)
-            ]
+            checks = _check_outcomes(chat.text, case.machine_checks, chat.tool_calls)
             result = CaseResult(
                 case_id=case.id,
                 suite=case.suite,
@@ -445,6 +481,9 @@ def run_case(
             category=case.category,
             source=case.source,
             prompt=case.prompt,
+            turn1_reply=chat1.text if chat1 is not None else None,
+            turn1_tool_calls=chat1.tool_calls if chat1 is not None else None,
+            checks=turn1_checks,
             total_ms=elapsed_ms,
             error=str(exc),
             fail_class="error",

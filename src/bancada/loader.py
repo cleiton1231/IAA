@@ -24,13 +24,22 @@ def load_named_suites(
         path = root / f"{name}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"suite not found: {path}")
-        suites.append(_apply_cap(load_suite(path), cap))
+        manual = _apply_cap(load_suite(path), cap)
+        suites.append(manual.model_copy(update={"version_key": name}))
         if include_imported:
             imported = root / "imported" / f"{name}.yaml"
             if imported.exists():
                 limit = imported_cap if imported_cap is not None else cap
-                suites.append(_apply_cap(load_suite(imported), limit))
+                imported_suite = _apply_cap(load_suite(imported), limit)
+                suites.append(
+                    imported_suite.model_copy(update={"version_key": f"imported/{name}"})
+                )
     return suites
+
+
+def suite_versions(suites: list[Suite]) -> dict[str, int]:
+    """Return persisted version identities, separating imported suites."""
+    return {suite.version_key or suite.name: suite.version for suite in suites}
 
 
 DEFAULT_CATEGORIES: dict[str, str] = {
@@ -50,6 +59,7 @@ def _apply_cap(suite: Suite, cap: int | None) -> Suite:
     return Suite(
         name=suite.name,
         version=suite.version,
+        version_key=suite.version_key,
         category=suite.category,
         cases=suite.cases[:cap],
     )

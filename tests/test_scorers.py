@@ -1,5 +1,7 @@
 """Structural scorers operate on the model reply, not on mocks of themselves."""
 
+from typing import Any
+
 from bancada.models import MachineCheck
 from bancada.scorers import extract_code, run_checks
 
@@ -132,6 +134,69 @@ def test_wikilink_allowlist_passes_subset() -> None:
     reply = "Ver [[Ponteiros]]."
     checks = [MachineCheck(type="wikilink_allowlist", allowed=["Ponteiros", "AEDS1"])]
     assert run_checks(reply, checks, tool_calls=None)[0].ok is True
+
+
+def test_obsidian_incomplete_reply_fails_and_markdown_variants_pass() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).resolve().parents[1] / "suites" / "obsidian.yaml")
+    cases = {case.id: case for case in suite.cases}
+    for case_id, reply in (
+        ("obsidian.limpar-nota", "Ponteiros"),
+        ("obsidian.flashcards", "ok"),
+        ("obsidian.diario", "ok"),
+    ):
+        assert not all(result.ok for result in run_checks(reply, cases[case_id].machine_checks))
+
+    replies = {
+        "obsidian.limpar-nota": "# Aula\n\nResumo curto. [[Ponteiros|ponteiros]] e [[AEDS1]].",
+        "obsidian.moc": "# Índice\n- [[Ponteiros|base]]\n1. [[Vetores]]\n2. **[[Modularizacao]]**",
+        "obsidian.flashcards": (
+            "1. **Pergunta:** O que é ponteiro?\n   **Resposta:** [[Ponteiros]] é um endereço.\n"
+            "- **Pergunta:** O que malloc faz?\n  **Resposta:** Aloca memória.\n"
+            "Pergunta: O que free faz?\nResposta: Devolve a memória."
+        ),
+        "obsidian.diario": "# 2026-09-10\n\nRegistrei mudanças em [[DocMind|meu RAG]].",
+    }
+    for case_id, reply in replies.items():
+        results = run_checks(reply, cases[case_id].machine_checks)
+        assert all(result.ok for result in results), case_id
+
+    diary_checks = cases["obsidian.diario"].machine_checks
+    for reply in (
+        "2026-09-10\n==========\n[[DocMind]]",
+        "# **2026-09-10**\n[[DocMind]]",
+    ):
+        assert all(result.ok for result in run_checks(reply, diary_checks))
+
+    flashcards = cases["obsidian.flashcards"].machine_checks
+    assert not all(
+        result.ok for result in run_checks("Pergunta: só uma\nResposta: incompleto", flashcards)
+    )
+    fenced_h1 = "```markdown\n# 2026-09-10\n```\n[[DocMind]]"
+    assert not all(
+        result.ok for result in run_checks(fenced_h1, cases["obsidian.diario"].machine_checks)
+    )
+
+
+def test_flashcard_pairs_require_nonempty_question_and_answer_bodies() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).resolve().parents[1] / "suites" / "obsidian.yaml")
+    case = next(case for case in suite.cases if case.id == "obsidian.flashcards")
+    empty_cards = "Pergunta:\nResposta:\n" * 3
+    assert not all(result.ok for result in run_checks(empty_cards, case.machine_checks))
+
+    continued_cards = (
+        "Pergunta:\n  O que é ponteiro?\nResposta:\n  Um endereço.\n"
+        "Pergunta: O que malloc faz?\nResposta: Aloca memória.\n"
+        "Pergunta: O que free faz?\nResposta: Devolve memória."
+    )
+    assert all(result.ok for result in run_checks(continued_cards, case.machine_checks))
 
 
 def test_tool_name_matches_openai_tool_calls() -> None:
@@ -366,6 +431,293 @@ def test_tool_args_accepts_relative_tomorrow() -> None:
     assert run_checks("", checks, tool_calls=rel)[0].ok is True
 
 
+def test_loaded_cron_checks_reject_relative_and_wrong_field_dates() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    by_id = {case.id: case for case in suite.cases}
+    relative = [
+        {
+            "function": {
+                "name": "cron",
+                "arguments": {"at": "tomorrow 09:00", "message": "Revisar ponteiros"},
+            }
+        }
+    ]
+    date_in_message = [
+        {
+            "function": {
+                "name": "cron",
+                "arguments": {
+                    "at": "2026-09-12T08:00:00",
+                    "message": "pytest em 2026-09-11",
+                },
+            }
+        }
+    ]
+
+    reminder = run_checks("", by_id["tools.cron-lembrete"].machine_checks, relative)
+    iso = run_checks("", by_id["tools.cron-iso"].machine_checks, date_in_message)
+    assert not reminder[1].ok and reminder[2].ok
+    assert not iso[1].ok and iso[2].ok
+
+
+def test_loaded_cron_field_checks_accept_iso_and_matching_message_formats() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    by_id = {case.id: case for case in suite.cases}
+
+    def cron_call(arguments: Any) -> list[dict[str, Any]]:
+        return [{"function": {"name": "cron", "arguments": arguments}}]
+
+    valid_cases = [
+        (
+            "tools.cron-lembrete",
+            cron_call({"at": "2026-09-21T09:00:00", "message": "Revisar ponteiros"}),
+            "",
+        ),
+        (
+            "tools.cron-lembrete",
+            cron_call(
+                '{"at":"2026-09-21T10:00:00+01:00","message":"Revisar ponteiros"}'
+            ),
+            "",
+        ),
+        (
+            "tools.cron-iso",
+            [],
+            'Agendamento: {"name":"cron","arguments":'
+            '{"at":"2026-09-11T08:00:00Z","message":"Rodar pytest"}}',
+        ),
+        (
+            "tools.cron-lembrete",
+            [],
+            "<tool_call><function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+            "<parameter=message>Revisar ponteiros</parameter></function></tool_call>",
+        ),
+    ]
+
+    for case_id, calls, reply in valid_cases:
+        assert all(
+            result.ok
+            for result in run_checks(reply, by_id[case_id].machine_checks, calls)
+        )
+
+
+def test_loaded_cron_field_checks_reject_invalid_or_unrelated_values() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    checks = next(case for case in suite.cases if case.id == "tools.cron-lembrete").machine_checks
+    def cron_call(arguments: Any, name: str = "cron") -> list[dict[str, Any]]:
+        return [{"function": {"name": name, "arguments": arguments}}]
+
+    invalid_calls = [
+        cron_call({"at": "tomorrow 09:00", "message": "ponteiros"}),
+        cron_call({"message": "ponteiros"}),
+        cron_call({"at": 1790269200, "message": "ponteiros"}),
+        cron_call({"at": "2026-02-30T09:00:00", "message": "ponteiros"}),
+        cron_call({"at": "2026-09-20T09:00:00", "message": "2026-09-21T09:00:00 ponteiros"}),
+        cron_call({"at": "2026-09-21T09:00:00", "message": "ponteiros"}, name="exec"),
+        cron_call('{"at":"2026-09-21T09:00:00", "message": "ponteiros"'),
+    ]
+
+    for calls in invalid_calls:
+        outcomes = run_checks("", checks, calls)
+        assert not outcomes[1].ok
+
+
+def test_cron_datetime_normalizes_z_and_offsets_on_python_310() -> None:
+    from bancada.scorers import _iso_datetimes_match
+
+    assert _iso_datetimes_match("2026-09-21T09:00:00Z", "2026-09-21T09:00:00")
+    assert _iso_datetimes_match("2026-09-21T10:00:00+01:00", "2026-09-21T09:00:00")
+
+
+def test_loaded_cron_checks_reject_offsets_outside_supported_datetime_range() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    for value in (
+        "0001-01-01T00:00:00+01:00",
+        "9999-12-31T23:59:59-01:00",
+    ):
+        call = [
+            {
+                "function": {
+                    "name": "cron",
+                    "arguments": {"at": value, "message": "Revisar ponteiros"},
+                }
+            }
+        ]
+        assert not run_checks("", case.machine_checks, call)[1].ok
+
+
+def test_loaded_cron_checks_reject_non_iso_offsets_normalized_by_datetime() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    for value in (
+        "2026-09-21T10:00:00+00:60",
+        "2026-09-21T11:00:00+01:60",
+        "2026-09-22T09:00:00+24:00",
+    ):
+        call = [
+            {
+                "function": {
+                    "name": "cron",
+                    "arguments": {"at": value, "message": "Revisar ponteiros"},
+                }
+            }
+        ]
+        assert not run_checks("", case.machine_checks, call)[1].ok
+
+
+def test_loaded_cron_text_fallback_does_not_promote_nested_argument_objects() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    nested_exec = (
+        '{"name":"exec","arguments":{"payload":{"name":"cron",'
+        '"arguments":{"at":"2026-09-21T09:00:00","message":"Revisar ponteiros"}}}}'
+    )
+    nested_cron = (
+        '{"name":"cron","arguments":{"payload":{"name":"cron",'
+        '"arguments":{"at":"2026-09-21T09:00:00","message":"Revisar ponteiros"}},'
+        '"message":"Revisar ponteiros"}}'
+    )
+
+    for reply in (nested_exec, nested_cron):
+        assert not run_checks(reply, case.machine_checks, tool_calls=[])[1].ok
+
+
+def test_loaded_cron_text_fallback_keeps_direct_wrappers_and_surrounding_text() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    function_wrapper = (
+        'Resposta: {"function":{"name":"cron","arguments":'
+        '{"at":"2026-09-21T09:00:00","message":"Revisar ponteiros"}}}'
+    )
+    fenced = (
+        '```json\n{"name":"cron","arguments":'
+        '{"at":"2026-09-21T09:00:00","message":"Revisar ponteiros"}}\n```'
+    )
+
+    array = (
+        '[{"name":"exec","arguments":{"command":"ls"}},'
+        '{"function":{"name":"cron","arguments":'
+        '{"at":"2026-09-21T09:00:00","message":"Revisar ponteiros"}}}]'
+    )
+    for reply in (function_wrapper, fenced, array):
+        assert all(result.ok for result in run_checks(reply, case.machine_checks, tool_calls=[]))
+
+
+def test_loaded_cron_xml_fallback_ignores_decoded_json_spans() -> None:
+    import json
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    xml_cron = (
+        "<function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+        "<parameter=message>Revisar ponteiros</parameter></function>"
+    )
+    outer_exec = (
+        '{"name":"exec","arguments":{"message":'
+        + json.dumps(xml_cron)
+        + "}}"
+    )
+    outer_cron = (
+        '{"name":"cron","arguments":{"at":"tomorrow 09:00",'
+        '"message":'
+        + json.dumps(xml_cron)
+        + "}}"
+    )
+    function_wrapper = (
+        '{"function":{"name":"exec","arguments":{"payload":'
+        + json.dumps(xml_cron)
+        + "}}}"
+    )
+    array = (
+        '[{"name":"exec","arguments":{"message":'
+        + json.dumps(xml_cron)
+        + "}}]"
+    )
+
+    for reply in (outer_exec, outer_cron, function_wrapper, array):
+        assert not run_checks(reply, case.machine_checks, tool_calls=[])[1].ok
+
+
+def test_loaded_cron_xml_fallback_still_accepts_xml_outside_json_spans() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    xml_cron = (
+        "<function=cron><parameter=at>2026-09-21T09:00:00</parameter>"
+        "<parameter=message>Revisar ponteiros</parameter></function>"
+    )
+    unrelated_json = '{"name":"exec","arguments":{"command":"ls"}}'
+
+    for reply in (
+        xml_cron,
+        "Resposta: " + unrelated_json + " " + xml_cron,
+        xml_cron + " " + unrelated_json,
+    ):
+        assert all(result.ok for result in run_checks(reply, case.machine_checks, tool_calls=[]))
+
+
+def test_loaded_cron_json_fallback_ignores_decoded_xml_spans() -> None:
+    from pathlib import Path
+
+    from bancada.loader import load_suite
+
+    suite = load_suite(Path(__file__).parents[1] / "suites" / "tools.yaml")
+    case = next(case for case in suite.cases if case.id == "tools.cron-lembrete")
+    nested_json = (
+        '{"name":"cron","arguments":{"at":"2026-09-21T09:00:00",'
+        '"message":"Revisar ponteiros"}}'
+    )
+    outer_exec = (
+        "<function=exec><parameter=command>"
+        + nested_json
+        + "</parameter></function>"
+    )
+    outer_cron = (
+        "<function=cron><parameter=at>tomorrow 09:00</parameter>"
+        "<parameter=message>"
+        + nested_json
+        + "</parameter></function>"
+    )
+
+    for reply in (outer_exec, outer_cron):
+        assert not run_checks(reply, case.machine_checks, tool_calls=[])[1].ok
+
+
 def test_must_cover_tmp_glob_satisfies_tmp_filenames() -> None:
     checks = [
         MachineCheck(type="must_cover", pattern="cache_01.tmp", target="arguments"),
@@ -416,5 +768,3 @@ def test_refuse_harmful_fails_on_dangerous_args() -> None:
         }
     ]
     assert run_checks(reply, checks, tool_calls=calls)[0].ok is False
-
-

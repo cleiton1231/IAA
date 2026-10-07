@@ -11,11 +11,19 @@ from pathlib import Path
 
 from bancada.aggregate import format_enem_lines, summarize_run
 from bancada.client import Client
-from bancada.loader import load_named_suites
+from bancada.loader import load_named_suites, suite_versions
 from bancada.models import Run
 from bancada.packet import render_packet, render_packet_compact, write_auto_scores
 from bancada.runner import run_many
-from bancada.store import find_resumable_run, list_runs, load_run, save_run, save_scores
+from bancada.store import (
+    ResumeConfig,
+    _validate_scores_run_id,
+    find_resumable_run,
+    list_runs,
+    load_run,
+    save_run,
+    save_scores,
+)
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1"
 DEFAULT_TEMPERATURE = 0.0
@@ -38,11 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     health = sub.add_parser("health")
-    health.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    health.add_argument("--endpoint", default=None)
     health.set_defaults(func=_cmd_health)
 
     smoke = sub.add_parser("smoke", help="run 1 case per suite for quick validation")
-    smoke.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    smoke.add_argument("--endpoint", default=None)
     smoke.add_argument(
         "--suites",
         default="skepticism,code,obsidian,tools",
@@ -58,7 +66,7 @@ def _parser() -> argparse.ArgumentParser:
     smoke.set_defaults(func=_cmd_smoke)
 
     run = sub.add_parser("run")
-    run.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    run.add_argument("--endpoint", default=None)
     run.add_argument("--suites", required=True, help="comma-separated suite names")
     run.add_argument("--suites-dir", default="suites")
     run.add_argument("--db", default="data/bancada.sqlite")
@@ -148,13 +156,25 @@ def _parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list")
     listing.add_argument("--db", default="data/bancada.sqlite")
     listing.set_defaults(func=_cmd_list)
+
+    gui = sub.add_parser("gui", help="open the local read-only run dashboard")
+    gui.add_argument("--db", default="data/bancada.sqlite")
+    gui.add_argument("--port", type=int, default=8765)
+    gui.set_defaults(func=_cmd_gui)
     return parser
 
 
 def _client(args: argparse.Namespace, client: Client | None) -> Client:
     if client is not None:
         return client
-    endpoint = getattr(args, "endpoint", DEFAULT_ENDPOINT)
+    endpoint = getattr(args, "endpoint", None)
+    if endpoint is None:
+        configured_endpoint = os.environ.get("BANCADA_ENDPOINT")
+        endpoint = (
+            configured_endpoint.strip()
+            if configured_endpoint and configured_endpoint.strip()
+            else DEFAULT_ENDPOINT
+        )
     api_key = os.environ.get("BANCADA_API_KEY")
     model = os.environ.get("BANCADA_MODEL")
     extra = None
@@ -275,7 +295,8 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
     total = sum(len(suite.cases) for suite in suites)
     c, health_model = _build_client(args, client)
     model_id = health_model
-    versions = {suite.name: suite.version for suite in suites}
+    versions = suite_versions(suites)
+    harness = getattr(args, "harness", "direct")
 
     resume_run = None
     if getattr(args, "resume", False):
@@ -285,12 +306,22 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
             model_id,
             versions,
             expected_case_ids=all_case_ids,
+            config=ResumeConfig(
+                endpoint=c.endpoint,
+                seed=args.seed,
+                temperature=args.temperature,
+                max_tokens=args.max_tokens,
+                timeout=args.timeout,
+                harness=harness,
+            ),
         )
         if resume_run:
             print(
                 f"resuming run {resume_run.id} ({len(resume_run.results)} cases loaded)",
                 flush=True,
             )
+        else:
+            print("no compatible resumable run found; starting a new run", flush=True)
 
     def on_progress(event: str, index: int, _total: int, case_id: str, *rest: object) -> None:
         if args.quiet:
@@ -316,7 +347,7 @@ def _cmd_run(args: argparse.Namespace, client: Client | None) -> int:
         seed=args.seed,
         resume_run=resume_run,
         db_path=Path(args.db),
-        harness=getattr(args, "harness", "direct"),
+        harness=harness,
         workers=max(1, int(getattr(args, "workers", 1) or 1)),
     )
     save_run(Path(args.db), run)
@@ -360,8 +391,10 @@ def _cmd_export(args: argparse.Namespace, client: Client | None) -> int:
 def _cmd_ingest(args: argparse.Namespace, client: Client | None) -> int:
     del client
     payload = json.loads(Path(args.scores_json).read_text(encoding="utf-8"))
+    _validate_scores_run_id(payload, args.run_id)
     run = load_run(Path(args.db), args.run_id)
     if run is not None and run.judge_scores:
+        _validate_scores_run_id(run.judge_scores, args.run_id)
         payload = _merge_scores(run.judge_scores, payload)
     elif "auto" in payload or "cases" in payload:
         # Merge auto list + judge cases if both present in one file
@@ -427,6 +460,25 @@ def _cmd_list(args: argparse.Namespace, client: Client | None) -> int:
     del client
     for run in list_runs(Path(args.db)):
         print(_format_run_line(run))
+    return 0
+
+
+def _cmd_gui(args: argparse.Namespace, client: Client | None) -> int:
+    del client
+    if not 1 <= args.port <= 65535:
+        raise ValueError("porta deve estar entre 1 e 65535")
+    db_path = Path(args.db).expanduser().resolve()
+    try:
+        from bancada.gui.app import serve
+    except ModuleNotFoundError as exc:
+        if exc.name == "flask":
+            print(
+                "A interface requer o extra opcional; instale com pip install -e '.[gui]'.",
+                file=sys.stderr,
+            )
+            return 1
+        raise
+    serve(db_path, port=args.port)
     return 0
 
 

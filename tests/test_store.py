@@ -2,8 +2,27 @@
 
 from pathlib import Path
 
+import pytest
+
 from bancada.models import CaseResult, CheckOutcome, Gabarito, Run, Stance
 from bancada.store import list_runs, load_run, save_run, save_scores
+
+
+def _resume_config(**overrides: object):
+    import bancada.store as store
+
+    config_type = getattr(store, "ResumeConfig", None)
+    assert config_type is not None, "store.ResumeConfig must be defined"
+    values = {
+        "endpoint": "http://127.0.0.1:8080/v1",
+        "seed": 42,
+        "temperature": 0.0,
+        "max_tokens": 512,
+        "timeout": 60.0,
+        "harness": "direct",
+    }
+    values.update(overrides)
+    return config_type(**values)
 
 
 def _run() -> Run:
@@ -66,6 +85,235 @@ def test_find_resumable_run(tmp_path: Path) -> None:
     assert find_resumable_run(db, "toy-model", {"code": 2}) is None
 
 
+def test_run_suite_versions_round_trip_with_manual_and_imported_keys(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.suite_versions = {"code": 5, "imported/code": 1}
+    save_run(db, run)
+
+    loaded = load_run(db, run.id)
+
+    assert loaded is not None
+    assert loaded.suite_versions == {"code": 5, "imported/code": 1}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("endpoint", "http://127.0.0.1:8081/v1"),
+        ("seed", 43),
+        ("temperature", 0.5),
+        ("max_tokens", 256),
+        ("timeout", 30.0),
+        ("harness", "pi"),
+    ],
+)
+def test_resume_requires_requested_configuration(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    setattr(run, field, value)
+    save_run(db, run)
+    expected = _resume_config()
+
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_requires_exact_version_map_and_raw_harness(tmp_path: Path) -> None:
+    import sqlite3
+
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    save_run(db, run)
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE runs SET harness = NULL WHERE id = ?", (run.id,))
+    expected = _resume_config()
+
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1, "imported/code": 1}, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_rejects_candidate_with_extra_persisted_version_key(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    run.suite_versions = {"code": 1, "legacy/extra": 4}
+    save_run(db, run)
+
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, config=_resume_config()
+        )
+        is None
+    )
+
+
+def test_resume_rejects_configuration_mismatch_for_automatic_and_explicit_selection(
+    tmp_path: Path,
+) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 41
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.harness = "direct"
+    save_run(db, run)
+    expected = _resume_config(seed=42)
+
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, run_id=run.id, config=expected
+        )
+        is None
+    )
+
+
+def test_resume_rejects_candidate_from_schema_without_configuration_columns(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE runs (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                suite_versions TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE case_results (
+                run_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                payload TEXT NOT NULL,
+                PRIMARY KEY (run_id, seq)
+            );
+            INSERT INTO runs (id, model_id, endpoint, suite_versions)
+            VALUES ('legacy-run', 'toy-model', 'http://127.0.0.1:8080/v1', '{"code": 1}');
+            """
+        )
+        original_columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+    assert "seed" not in original_columns
+    assert "harness" not in original_columns
+
+    expected = _resume_config()
+    assert find_resumable_run(db, "toy-model", {"code": 1}, config=expected) is None
+    assert (
+        find_resumable_run(
+            db, "toy-model", {"code": 1}, run_id="legacy-run", config=expected
+        )
+        is None
+    )
+
+
+def test_resume_returns_compatible_incomplete_run_and_retries_errors(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    run.results[0].error = "temporary endpoint error"
+    save_run(db, run)
+    expected = _resume_config()
+
+    found = find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse", "code.second"},
+        config=expected,
+    )
+    assert found is not None
+    assert found.id == run.id
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse"},
+        config=expected,
+    ) is not None
+    run.results[0].error = None
+    save_run(db, run)
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1},
+        expected_case_ids={"code.reverse"},
+        config=expected,
+    ) is None
+
+
+def test_explicit_resume_id_obeys_configuration_filters(tmp_path: Path) -> None:
+    from bancada.store import find_resumable_run
+
+    db = tmp_path / "bancada.sqlite"
+    run = _run()
+    run.endpoint = "http://127.0.0.1:8080/v1"
+    run.seed = 42
+    run.temperature = 0.0
+    run.max_tokens = 512
+    run.timeout = 60.0
+    save_run(db, run)
+    expected = _resume_config()
+
+    assert find_resumable_run(
+        db, "toy-model", {"code": 1}, run_id=run.id, config=expected
+    ) is not None
+    assert find_resumable_run(
+        db,
+        "toy-model",
+        {"code": 1, "imported/code": 1},
+        run_id=run.id,
+        config=expected,
+    ) is None
+
+
 def test_list_runs_newest_first(tmp_path: Path) -> None:
     db = tmp_path / "bancada.sqlite"
     first = _run()
@@ -96,3 +344,30 @@ def test_save_scores_round_trip(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.judge_scores is not None
     assert loaded.judge_scores["cases"][0]["score"] == 3
+
+
+def test_save_scores_rejects_mismatched_identity_before_creating_database(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "missing" / "bancada.sqlite"
+    with pytest.raises(ValueError, match="run_id"):
+        save_scores(db, "destination", {"run_id": "source", "cases": []})
+    assert not db.exists()
+    assert not db.parent.exists()
+
+
+def test_save_scores_rejects_invalid_present_identity(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    save_run(db, _run())
+    before = db.read_bytes()
+    for declared in (None, "", 7, {}, False):
+        with pytest.raises(ValueError, match="run_id"):
+            save_scores(db, "abc123", {"run_id": declared, "cases": []})
+        assert db.read_bytes() == before
+
+
+def test_save_scores_accepts_matching_and_legacy_identity(tmp_path: Path) -> None:
+    db = tmp_path / "bancada.sqlite"
+    save_run(db, _run())
+    save_scores(db, "abc123", {"run_id": "abc123", "cases": []})
+    save_scores(db, "abc123", {"cases": []})

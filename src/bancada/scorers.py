@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from bancada.models import MachineCheck
@@ -51,10 +53,25 @@ def _run_one(
         return _python_test(reply, check.source or "", check.setup)
     if check.type == "wikilink_allowlist":
         return _wikilinks(reply, check.allowed or [])
+    if check.type == "markdown_h1":
+        return _markdown_h1(reply, check.expected)
+    if check.type == "wikilink_required":
+        return _wikilink_required(reply, check.allowed or [])
+    if check.type == "flashcard_pairs":
+        return _flashcard_pairs(reply, check.expected or "3")
     if check.type == "tool_name":
         return _tool_name(tool_calls, check.expected, reply)
     if check.type == "tool_args":
         return _tool_args(tool_calls, reply, check.pattern or check.expected or "")
+    if check.type == "tool_field":
+        return _tool_field(
+            tool_calls,
+            reply,
+            tool_name=check.expected or "",
+            field=check.target or "",
+            pattern=check.pattern or "",
+            value_format=check.format,
+        )
     if check.type == "must_cover":
         target = getattr(check, "target", None)
         if target == "arguments":
@@ -90,6 +107,132 @@ def _tool_args(
     if not ok and _cron_relative_at(text, pattern):
         ok = True
     return CheckResult("tool_args", ok, "" if ok else f"args missing: {pattern}")
+
+
+def _tool_field(
+    tool_calls: list[dict[str, Any]] | None,
+    reply: str,
+    *,
+    tool_name: str,
+    field: str,
+    pattern: str,
+    value_format: str | None,
+) -> CheckResult:
+    values: list[Any] = []
+    if tool_calls:
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function")
+            source = function if isinstance(function, dict) else call
+            if source.get("name") != tool_name:
+                continue
+            arguments = _argument_object(source.get("arguments"))
+            if arguments is not None and field in arguments:
+                values.append(arguments[field])
+    else:
+        values.extend(_text_tool_field_values(reply, tool_name, field))
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        if value_format == "iso_datetime":
+            if _iso_datetimes_match(value, pattern):
+                return CheckResult("tool_field", True)
+        elif _match_pattern(value, pattern):
+            return CheckResult("tool_field", True)
+    return CheckResult(
+        "tool_field", False, f"{tool_name}.{field} missing or invalid: {pattern}"
+    )
+
+
+def _argument_object(arguments: Any) -> dict[str, Any] | None:
+    if isinstance(arguments, dict):
+        return arguments
+    if not isinstance(arguments, str):
+        return None
+    try:
+        parsed = json.loads(arguments)
+    except (json.JSONDecodeError, RecursionError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _text_tool_field_values(reply: str, tool_name: str, field: str) -> list[Any]:
+    values: list[Any] = []
+    decoder = json.JSONDecoder()
+    text = reply or ""
+    cursor = 0
+    function_pattern = re.compile(
+        r"<function(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        r"([^\"'\s>]+)[\"']?\s*>(.*?)</function>",
+        re.DOTALL,
+    )
+    parameter_pattern = re.compile(
+        r"<parameter(?:\s*=\s*|\s+name\s*=\s*[\"']?)"
+        + re.escape(field)
+        + r"[\"']?\s*>(.*?)</parameter>",
+        re.DOTALL,
+    )
+    while cursor < len(text):
+        object_start = text.find("{", cursor)
+        array_start = text.find("[", cursor)
+        json_start_candidates = [pos for pos in (object_start, array_start) if pos >= 0]
+        json_start = min(json_start_candidates, default=-1)
+        xml_match = function_pattern.search(text, cursor)
+
+        if xml_match is not None and (json_start < 0 or xml_match.start() < json_start):
+            if xml_match.group(1) == tool_name:
+                values.extend(
+                    parameter_match.group(1).strip()
+                    for parameter_match in parameter_pattern.finditer(xml_match.group(2))
+                )
+            cursor = xml_match.end()
+            continue
+
+        if json_start < 0:
+            break
+        try:
+            parsed, end = decoder.raw_decode(text, json_start)
+        except (json.JSONDecodeError, RecursionError):
+            cursor = json_start + 1
+            continue
+        candidates = parsed if isinstance(parsed, list) else [parsed]
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            function = candidate.get("function")
+            source = function if isinstance(function, dict) else candidate
+            if source.get("name") != tool_name:
+                continue
+            arguments = _argument_object(source.get("arguments"))
+            if arguments is not None and field in arguments:
+                values.append(arguments[field])
+        cursor = end
+    return values
+
+
+def _iso_datetimes_match(candidate: str, expected: str) -> bool:
+    candidate_dt = _parse_iso_datetime(candidate)
+    expected_dt = _parse_iso_datetime(expected)
+    return candidate_dt is not None and candidate_dt == expected_dt
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+        r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?",
+        value,
+    ):
+        return None
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError):
+        return None
 
 
 def _cron_relative_at(text: str, pattern: str) -> bool:
@@ -183,12 +326,115 @@ def _has_flush_left_definition(code: str) -> bool:
 
 
 def _wikilinks(reply: str, allowed: list[str]) -> CheckResult:
-    found = WIKILINK_RE.findall(reply or "")
+    found = [_wikilink_target(link) for link in WIKILINK_RE.findall(reply or "")]
     allow = set(allowed)
     unknown = [name for name in found if name not in allow]
     if unknown:
         return CheckResult("wikilink_allowlist", False, f"unknown wikilinks: {', '.join(unknown)}")
     return CheckResult("wikilink_allowlist", True, "")
+
+
+def _wikilink_target(link: str) -> str:
+    return link.split("|", 1)[0].strip()
+
+
+def _wikilink_required(reply: str, required: list[str]) -> CheckResult:
+    found = {_wikilink_target(link) for link in WIKILINK_RE.findall(reply or "")}
+    missing = [target for target in required if target not in found]
+    return CheckResult(
+        "wikilink_required",
+        not missing,
+        "" if not missing else f"missing wikilinks: {', '.join(missing)}",
+    )
+
+
+def _outside_fenced_code(reply: str) -> str:
+    lines = (reply or "").splitlines()
+    visible: list[str] = []
+    fence_char: str | None = None
+    fence_length = 0
+    for line in lines:
+        match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+        if match:
+            marker = match.group(1)
+            if fence_char is None:
+                fence_char, fence_length = marker[0], len(marker)
+            elif marker[0] == fence_char and len(marker) >= fence_length:
+                fence_char, fence_length = None, 0
+            continue
+        if fence_char is None:
+            visible.append(line)
+    return "\n".join(visible)
+
+
+def _markdown_h1(reply: str, expected: str | None) -> CheckResult:
+    lines = _outside_fenced_code(reply).splitlines()
+    titles: list[str] = []
+    for index, line in enumerate(lines):
+        atx = re.match(r"^\s{0,3}#(?!#)\s+(.+?)\s*#*\s*$", line)
+        if atx:
+            titles.append(atx.group(1))
+        elif index + 1 < len(lines) and re.match(r"^\s{0,3}=+\s*$", lines[index + 1]):
+            if line.strip():
+                titles.append(line.strip())
+    titles = [_visible_markdown_text(title) for title in titles]
+    if expected is None:
+        ok = bool(titles)
+    else:
+        ok = expected in titles
+    reason = "" if ok else (f"missing H1: {expected}" if expected else "missing H1")
+    return CheckResult("markdown_h1", ok, reason)
+
+
+def _visible_markdown_text(text: str) -> str:
+    text = re.sub(r"\s+#+\s*$", "", text).strip()
+    text = re.sub(r"(\*\*|__|\*|_)(.*?)\1", r"\2", text)
+    return text.strip()
+
+
+def _flashcard_pairs(reply: str, expected: str) -> CheckResult:
+    try:
+        wanted = int(expected)
+    except (TypeError, ValueError):
+        return CheckResult("flashcard_pairs", False, f"invalid pair count: {expected}")
+    questions = re.compile(r"^(?:pergunta|quest[aã]o|q)\s*:(.*)$", re.IGNORECASE)
+    answers = re.compile(r"^(?:resposta|answer|a)\s*:(.*)$", re.IGNORECASE)
+    cards: list[dict[str, list[str] | None]] = []
+    current: dict[str, list[str] | None] | None = None
+    section: str | None = None
+    malformed = False
+    for line in _outside_fenced_code(reply).splitlines():
+        line = re.sub(r"^\s*(?:(?:[-+*])\s+|\d+[.)]\s+)", "", line).strip()
+        line = line.replace("**", "").replace("__", "").strip()
+        question = questions.match(line)
+        answer = answers.match(line)
+        if question:
+            if current is not None:
+                if current["answer"] is None:
+                    malformed = True
+                cards.append(current)
+            current = {"question": [question.group(1).strip()], "answer": None}
+            section = "question"
+        elif answer:
+            if current is None or current["answer"] is not None:
+                malformed = True
+            else:
+                current["answer"] = [answer.group(1).strip()]
+                section = "answer"
+        elif current is not None and line:
+            body = current[section] if section else None
+            if body is not None:
+                body.append(line)
+    if current is not None:
+        cards.append(current)
+    complete = all(
+        bool(" ".join(card["question"] or []).strip())
+        and bool(" ".join(card["answer"] or []).strip())
+        for card in cards
+    )
+    ok = len(cards) == wanted and complete and not malformed
+    reason = "" if ok else f"expected {wanted} complete Pergunta/Resposta pairs, got {len(cards)}"
+    return CheckResult("flashcard_pairs", ok, reason)
 
 
 def _tool_name(
@@ -346,4 +592,3 @@ def _stance(
         return CheckResult("stance", ok, "" if ok else "did not ask for source or express doubt")
 
     return CheckResult("stance", False, f"unknown stance {expected}")
-

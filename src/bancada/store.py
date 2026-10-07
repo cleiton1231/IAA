@@ -4,10 +4,21 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from bancada.models import Run
+
+
+@dataclass(frozen=True)
+class ResumeConfig:
+    endpoint: str
+    seed: int
+    temperature: float
+    max_tokens: int
+    timeout: float
+    harness: str
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -133,16 +144,40 @@ def find_resumable_run(
     suite_versions: dict[str, int],
     run_id: str | None = None,
     expected_case_ids: list[str] | set[str] | None = None,
+    *,
+    config: ResumeConfig | None = None,
 ) -> Run | None:
+    def compatible(cand: Run) -> bool:
+        if cand.model_id != model_id or cand.suite_versions != suite_versions:
+            return False
+        if config is None:
+            return True
+        conn = _connect(Path(path))
+        try:
+            row = conn.execute(
+                """SELECT endpoint, seed, temperature, max_tokens, timeout, harness
+                   FROM runs WHERE id = ?""",
+                (cand.id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        return row == (
+            config.endpoint,
+            config.seed,
+            config.temperature,
+            config.max_tokens,
+            config.timeout,
+            config.harness,
+        )
+
     if run_id:
         cand = load_run(path, run_id)
-        if cand and cand.model_id == model_id:
-            if all(cand.suite_versions.get(k) == v for k, v in suite_versions.items()):
-                if expected_case_ids:
-                    done = {r.case_id for r in cand.results if not r.error}
-                    if set(expected_case_ids).issubset(done):
-                        return None
-                return cand
+        if cand and compatible(cand):
+            if expected_case_ids:
+                done = {r.case_id for r in cand.results if not r.error}
+                if set(expected_case_ids).issubset(done):
+                    return None
+            return cand
         return None
 
     conn = _connect(Path(path))
@@ -157,14 +192,15 @@ def find_resumable_run(
                 v_dict = json.loads(versions_json)
             except Exception:
                 continue
-            if all(v_dict.get(k) == v for k, v in suite_versions.items()):
-                cand = load_run(path, cand_id)
-                if cand:
-                    if expected_case_ids:
-                        done = {r.case_id for r in cand.results if not r.error}
-                        if set(expected_case_ids).issubset(done):
-                            continue
-                    return cand
+            if v_dict != suite_versions:
+                continue
+            cand = load_run(path, cand_id)
+            if cand and compatible(cand):
+                if expected_case_ids:
+                    done = {r.case_id for r in cand.results if not r.error}
+                    if set(expected_case_ids).issubset(done):
+                        continue
+                return cand
         return None
     finally:
         conn.close()
@@ -202,6 +238,7 @@ def merge_scores(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def save_scores(path: Path | str, run_id: str, scores: dict[str, Any]) -> None:
+    _validate_scores_run_id(scores, run_id)
     conn = _connect(Path(path))
     try:
         exists = conn.execute("SELECT 1 FROM runs WHERE id = ?", (run_id,)).fetchone()
@@ -215,3 +252,13 @@ def save_scores(path: Path | str, run_id: str, scores: dict[str, Any]) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def _validate_scores_run_id(scores: dict[str, Any], expected_run_id: str) -> None:
+    if "run_id" not in scores:
+        return
+    declared = scores["run_id"]
+    if not isinstance(declared, str) or not declared.strip() or declared != expected_run_id:
+        raise ValueError(
+            f"scores run_id must be a non-empty string matching destination {expected_run_id}"
+        )

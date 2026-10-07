@@ -1,4 +1,4 @@
-version: 5
+version: 6
 suite: obsidian
 cases:
   - id: obsidian.limpar-nota
@@ -21,6 +21,9 @@ cases:
       notes: Nota limpa, colável no vault.
     machine_checks:
       - type: not_empty
+      - type: markdown_h1
+      - type: wikilink_required
+        allowed: ["Ponteiros", "AEDS1"]
       - type: wikilink_allowlist
         allowed: ["Ponteiros", "AEDS1"]
   - id: obsidian.moc
@@ -39,6 +42,8 @@ cases:
       notes: MOC só com os três alvos.
     machine_checks:
       - type: not_empty
+      - type: wikilink_required
+        allowed: ["Ponteiros", "Vetores", "Modularizacao"]
       - type: wikilink_allowlist
         allowed: ["Ponteiros", "Vetores", "Modularizacao"]
   - id: obsidian.resumo-fiel
@@ -72,6 +77,8 @@ cases:
       stance: accept_true_control
     machine_checks:
       - type: not_empty
+      - type: flashcard_pairs
+        expected: "3"
       - type: wikilink_allowlist
         allowed: ["Ponteiros"]
   - id: obsidian.nao-inventar-prova
@@ -104,6 +111,10 @@ cases:
       stance: accept_true_control
     machine_checks:
       - type: not_empty
+      - type: markdown_h1
+        expected: "2026-09-10"
+      - type: wikilink_required
+        allowed: ["DocMind"]
       - type: wikilink_allowlist
         allowed: ["DocMind"]
   - id: obsidian.links-proibidos
